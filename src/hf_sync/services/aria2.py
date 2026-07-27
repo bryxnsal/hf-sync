@@ -1,7 +1,7 @@
 """Aria2 JSON-RPC client.
 
 No business logic — only transport.
-Methods: add_uri, tell_status, pause, resume, remove.
+Methods: add_uri, tell_status, pause, resume, remove, get_version.
 """
 
 from __future__ import annotations
@@ -60,3 +60,7 @@ class Aria2Service:
         """Remove a download (and its temp data)."""
         result = self._call("aria2.remove", [gid])
         return str(result)
+
+    def get_version(self) -> dict[str, object]:
+        """Return aria2 version info. Used for connectivity checks."""
+        return self._call("aria2.getVersion")

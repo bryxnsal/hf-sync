@@ -22,7 +22,7 @@ class DoctorService:
 
         try:
             aria2 = Aria2Service(settings.aria2_rpc_url, settings.aria2_rpc_secret)
-            aria2.tell_status("0" * 16)
+            aria2.get_version()
             report.aria2 = True
         except Exception:
             report.aria2 = False
