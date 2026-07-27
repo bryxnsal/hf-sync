@@ -239,6 +239,8 @@ def start(
 
 
 async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> None:
+    Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
+
     conn = await Database(settings.db_path).connect()
     repo = FileRepository(conn)
 

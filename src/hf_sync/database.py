@@ -7,6 +7,7 @@ All raw SQL lives in repositories/ — this module owns schema only.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import ClassVar
 
 import aiosqlite
@@ -51,6 +52,7 @@ class Database:
 
     async def connect(self) -> aiosqlite.Connection:
         """Open (or create) the database and ensure tables exist."""
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         conn = await aiosqlite.connect(self.path)
         conn.row_factory = aiosqlite.Row
         await conn.executescript(_SCHEMA_SQL)
@@ -60,6 +62,7 @@ class Database:
     @staticmethod
     async def init_db(path: str = "data/state.db") -> None:
         """Idempotent schema creation (called from CLI init)."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         conn = await aiosqlite.connect(path)
         await conn.executescript(_SCHEMA_SQL)
         await conn.commit()
