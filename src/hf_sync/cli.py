@@ -244,6 +244,23 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     conn = await Database(settings.db_path).connect()
     repo = FileRepository(conn)
 
+    # Auto-init if DB is empty: scan repo and populate pending files
+    cur = await conn.execute("SELECT COUNT(*) as cnt FROM files")
+    row = await cur.fetchone()
+    file_count = int(row["cnt"]) if row else 0
+    if file_count == 0:
+        logger.info("No files in DB — scanning repo {}", repo_id)
+        hf = HuggingFaceService(settings.hf_token)
+        files = hf.list_files(repo_id)
+        for f in files:
+            await repo.insert(
+                filename=str(f["filename"]),
+                size=int(f.get("size", 0)),  # type: ignore[arg-type]
+                status="PENDING",
+                local_path=str(Path(settings.temp_dir) / str(f["filename"])),
+            )
+        logger.info("Found {} files — starting sync", len(files))
+
     aria2 = Aria2Service(settings.aria2_rpc_url, settings.aria2_rpc_secret)
     rclone = RcloneService(rclone_remote)
     downloader = Downloader(aria2)
