@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 
 
 @dataclass
@@ -42,5 +41,5 @@ class ProgressSnapshot:
     stage: str = ""
     current: int = 0
     total: int = 0
-    elapsed: float = 0.0
+    elapsed: float = 0.0  # seconds
     file: str = ""

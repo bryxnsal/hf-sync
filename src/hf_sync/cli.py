@@ -33,7 +33,8 @@ from hf_sync.services.aria2 import Aria2Service
 from hf_sync.services.doctor import DoctorService
 from hf_sync.services.huggingface import HuggingFaceService
 from hf_sync.services.rclone import RcloneService
-from hf_sync.types.dto import DryRunReport, SyncTask
+from hf_sync.types.dto import SyncTask
+from hf_sync.utils.bytes import human_size
 
 # Ruta del archivo de configuración (misma lógica que en config.py)
 _CONFIG_PATH = Path(os.environ.get(
@@ -127,25 +128,65 @@ def auth(
 
 
 @app.command()
-def doctor() -> None:
-    """Check system dependencies (aria2, rclone, token, permissions)."""
+def doctor(
+    repo_id: str = typer.Argument(
+        default=None,
+        help="HF repo ID (optional, checks largest file disk space)",
+    ),
+    destination: str = typer.Argument(
+        default=None,
+        help="rclone destination (e.g. googledrive:models/llama)",
+    ),
+) -> None:
+    """Check system health. Optionally validate repo + destination space."""
+    if repo_id and destination:
+        # Full dry-run mode
+        _show_dry_run(repo_id, destination)
+        return
+
     svc = DoctorService()
     report = svc.check_all()
 
-    def tag(ok: bool) -> str:
+    def tag(ok: bool, configured: bool = True) -> str:
+        if not configured:
+            return "[dim]—[/dim]"
         return "[green]✓[/green]" if ok else "[red]✗[/red]"
+
+    def hint(msg: str) -> str:
+        return f" [dim]({msg})[/dim]" if msg else ""
 
     table = Table(title="HF Sync — Doctor")
     table.add_column("Check", style="bold")
     table.add_column("Status")
 
-    table.add_row("aria2 RPC", tag(report.aria2))
+    aria2_status = tag(report.aria2)
+    if report.aria2_error:
+        aria2_status += hint(report.aria2_error)
+    table.add_row("aria2 RPC", aria2_status)
+
     table.add_row("rclone binary", tag(report.rclone))
-    table.add_row("HF token", tag(report.hf_token))
-    table.add_row("Drive access", tag(report.drive_access))
-    table.add_row(f"Free space ({report.free_space_gb} GB)", tag(report.free_space_gb > 1))
+    table.add_row("HF token", tag(report.hf_token, report.hf_token_configured))
+
+    drive_status = tag(report.drive_access, report.drive_configured)
+    if report.drive_error:
+        drive_status += hint(report.drive_error)
+    table.add_row("Drive access", drive_status)
+
+    free_tag = tag(report.free_space_gb > 1, report.drive_configured)
+    table.add_row(f"Free space ({report.free_space_gb} GB)", free_tag)
     table.add_row("Permissions", tag(report.permissions_ok))
+
     console.print(table)
+
+    # Hints for common issues
+    if not report.aria2:
+        console.print("  [yellow]→ Run: aria2c --enable-rpc --rpc-listen-all[/yellow]")
+    if not report.hf_token and not report.hf_token_configured:
+        console.print("  [yellow]→ Run: hf-sync auth <your_token>[/yellow]")
+    if not report.drive_access and report.drive_configured:
+        console.print("  [yellow]→ Check rclone config: rclone config[/yellow]")
+    if not report.drive_configured:
+        console.print("  [yellow]→ Set RCLONE_REMOTE in .env or configure rclone remotes[/yellow]")
 
 
 # ── init ────────────────────────────────────────────────────────────────
@@ -235,11 +276,15 @@ def start(
         return
 
     rclone_remote, rclone_path = _parse_destination(dest)
-    asyncio.run(_start_impl(repo_id, rclone_remote, rclone_path))
+    try:
+        asyncio.run(_start_impl(repo_id, rclone_remote, rclone_path))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Sync cancelled by user[/yellow]")
 
 
 async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> None:
     Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
 
     conn = await Database(settings.db_path).connect()
     repo = FileRepository(conn)
@@ -261,6 +306,15 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
             )
         logger.info("Found {} files — starting sync", len(files))
 
+    # Count total pending
+    cur = await conn.execute("SELECT COUNT(*) as cnt FROM files WHERE status = 'PENDING'")
+    row = await cur.fetchone()
+    total = int(row["cnt"]) if row else 0
+    if total == 0:
+        console.print("[yellow]No files to sync[/yellow]")
+        await conn.close()
+        return
+
     aria2 = Aria2Service(settings.aria2_rpc_url, settings.aria2_rpc_secret)
     rclone = RcloneService(rclone_remote)
     downloader = Downloader(aria2)
@@ -270,28 +324,78 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     coordinator = Coordinator(downloader, uploader, verifier, cleanup, repo, settings.temp_dir)
     hf = HuggingFaceService(settings.hf_token)
 
-    while True:
-        row = await repo.get_pending()
-        if row is None:
-            break
+    from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn, SpinnerColumn, TimeElapsedColumn
 
-        file_id = int(row["id"])  # type: ignore[arg-type]
-        src_url = hf.get_signed_url(repo_id, str(row["filename"]))
-        remote_file = f"{rclone_remote}:{rclone_path}/{row['filename']}" if rclone_path else f"{rclone_remote}:{row['filename']}"
+    succeeded = 0
+    failed = 0
 
-        task = SyncTask(
-            file_id=file_id,
-            filename=str(row["filename"]),
-            source_url=src_url,
-            local_path=str(row["local_path"]),
-            remote_path=remote_file,
-            size=int(row["size"]),  # type: ignore[arg-type]
-            sha256=str(row["sha256"]),
-        )
-        await coordinator.run(task)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        overall = progress.add_task("[cyan]Syncing...", total=total)
 
+        while True:
+            row = await repo.get_pending()
+            if row is None:
+                break
+
+            done = int(progress.tasks[overall].completed)
+            file_id = int(row["id"])  # type: ignore[arg-type]
+            filename = str(row["filename"])
+            src_url = hf.get_signed_url(repo_id, filename)
+            remote_file = f"{rclone_remote}:{rclone_path}/{filename}" if rclone_path else f"{rclone_remote}:{filename}"
+
+            size = int(row["size"])  # type: ignore[arg-type]
+            progress.update(overall, description=f"[cyan][{done}/{total}] {filename} ({human_size(size)})")
+
+            task = SyncTask(
+                file_id=file_id,
+                filename=filename,
+                source_url=src_url,
+                local_path=str(row["local_path"]),
+                remote_path=remote_file,
+                size=size,
+                sha256=str(row["sha256"]),
+            )
+            ok = await coordinator.run(task)
+            if ok:
+                succeeded += 1
+            else:
+                failed += 1
+            progress.update(overall, advance=1)
+
+        progress.update(overall, description="[green]✓ Pipeline complete")
+
+    # Summary
+    await conn.commit()
+    cur = await conn.execute("SELECT status, COUNT(*) as cnt FROM files GROUP BY status")
+    rows = await cur.fetchall()
     await conn.close()
-    console.print("[green]✓ Pipeline complete[/green]")
+
+    summary_table = Table(title="Results", show_header=False)
+    summary_table.add_column("Status", style="bold")
+    summary_table.add_column("Count")
+    summary_table.add_row("[green]DONE[/green]", str(succeeded))
+    summary_table.add_row("[red]FAILED[/red]", str(failed))
+    total_processed = succeeded + failed
+    summary_table.add_row("[dim]Total[/dim]", str(total_processed))
+
+    for row in rows:
+        s = str(row["status"])
+        c = str(row["cnt"])
+        if s == "DONE":
+            continue  # already shown
+        if s == "FAILED":
+            continue  # already shown
+        summary_table.add_row(f"[yellow]{s}[/yellow]", c)
+
+    console.print()
+    console.print(summary_table)
 
 
 # ── resume ──────────────────────────────────────────────────────────────

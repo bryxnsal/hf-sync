@@ -24,8 +24,14 @@ class Downloader:
         gid = self.aria2.add_uri(url, {"dir": dest_dir, "out": Path(dest).name})
         return gid
 
-    def wait_for_completion(self, gid: str, poll_interval: float = 2.0) -> dict[str, str]:
-        """Poll aria2 until download completes or fails."""
+    def wait_for_completion(self, gid: str, poll_interval: float = 2.0,
+                             progress_callback=None) -> dict[str, str]:
+        """
+        Poll aria2 until download completes or fails.
+
+        If progress_callback is provided, call it every poll with
+        (completed_bytes, total_bytes, speed_bps).
+        """
         import time
 
         while True:
@@ -33,4 +39,11 @@ class Downloader:
             s = status.get("status", "")
             if s in ("complete", "error", "removed"):
                 return status
+
+            if progress_callback:
+                completed = int(status.get("completedLength", "0"))
+                total = int(status.get("totalLength", "0"))
+                speed = int(status.get("downloadSpeed", "0"))
+                progress_callback(completed, total, speed)
+
             time.sleep(poll_interval)

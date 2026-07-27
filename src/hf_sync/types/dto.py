@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 
 
 @dataclass
@@ -35,9 +34,14 @@ class DoctorReport:
     """DTO for system health check results."""
 
     aria2: bool = False
+    aria2_configured: bool = True
+    aria2_error: str = ""
     rclone: bool = False
     hf_token: bool = False
+    hf_token_configured: bool = True
     drive_access: bool = False
+    drive_configured: bool = True
+    drive_error: str = ""
     free_space_gb: float = 0.0
     permissions_ok: bool = False
 
