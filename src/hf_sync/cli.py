@@ -283,6 +283,10 @@ def start(
 
 
 async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> None:
+    # Suppress console logging first — redirect all to file
+    logger.remove()
+    logger.add("hf-sync.log", level="DEBUG", rotation="10 MB")
+
     Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -294,7 +298,7 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     row = await cur.fetchone()
     file_count = int(row["cnt"]) if row else 0
     if file_count == 0:
-        logger.info("No files in DB — scanning repo {}", repo_id)
+        console.print(f"[dim]Scanning repo {repo_id}...[/dim]")
         hf = HuggingFaceService(settings.hf_token)
         files = hf.list_files(repo_id)
         for f in files:
@@ -304,7 +308,7 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
                 status="PENDING",
                 local_path=str(Path(settings.temp_dir) / str(f["filename"])),
             )
-        logger.info("Found {} files — starting sync", len(files))
+        console.print(f"[dim]Found {len(files)} files[/dim]")
 
     # Count total pending
     cur = await conn.execute("SELECT COUNT(*) as cnt FROM files WHERE status = 'PENDING'")
@@ -317,41 +321,69 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
 
     aria2 = Aria2Service(settings.aria2_rpc_url, settings.aria2_rpc_secret)
     rclone = RcloneService(rclone_remote)
-    downloader = Downloader(aria2)
-    uploader = Uploader(rclone)
-    verifier = Verifier()
-    cleanup = Cleanup()
-    coordinator = Coordinator(downloader, uploader, verifier, cleanup, repo, settings.temp_dir)
+    coordinator = Coordinator(
+        Downloader(aria2), Uploader(rclone), Verifier(), Cleanup(),
+        repo, settings.temp_dir,
+    )
     hf = HuggingFaceService(settings.hf_token)
 
-    from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn, SpinnerColumn, TimeElapsedColumn
+    from rich.console import Group
+    from rich.live import Live
+    from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
+    from rich.text import Text
 
-    succeeded = 0
-    failed = 0
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
+    # File progress bar — re-created per file
+    file_progress = Progress(
+        TextColumn("{task.description}"),
+        BarColumn(bar_width=40),
+        TextColumn("{task.percentage:>3.0f}%"),
         TimeElapsedColumn(),
+        TextColumn("{task.fields[speed]}"),
         console=console,
-    ) as progress:
-        overall = progress.add_task("[cyan]Syncing...", total=total)
+    )
+    file_task = file_progress.add_task("[dim]Waiting...[/dim]", total=100, speed="")
 
+    overall_progress = Progress(
+        TextColumn("  [cyan]Overall:"),
+        BarColumn(bar_width=30),
+        TextColumn("{task.percentage:>3.0f}%"),
+        TextColumn("{task.completed}/{task.total} files"),
+        console=console,
+    )
+    overall_task = overall_progress.add_task("", total=total)
+
+    done = 0
+    failed = 0
+    completed_lines: list[Text] = []
+
+    def build_display() -> Group:
+        items: list = list(completed_lines)
+        if items:
+            items.append(Text(""))
+        items.append(file_progress)
+        items.append(Text(""))
+        items.append(overall_progress)
+        return Group(*items)
+
+    with Live(build_display(), console=console, refresh_per_second=4):
         while True:
             row = await repo.get_pending()
             if row is None:
                 break
 
-            done = int(progress.tasks[overall].completed)
             file_id = int(row["id"])  # type: ignore[arg-type]
             filename = str(row["filename"])
             src_url = hf.get_signed_url(repo_id, filename)
             remote_file = f"{rclone_remote}:{rclone_path}/{filename}" if rclone_path else f"{rclone_remote}:{filename}"
-
             size = int(row["size"])  # type: ignore[arg-type]
-            progress.update(overall, description=f"[cyan][{done}/{total}] {filename} ({human_size(size)})")
+            idx = done + failed + 1
+
+            # Fresh task per file so elapsed timer resets
+            file_progress.remove_task(file_task)
+            file_task = file_progress.add_task(
+                f"[green][{idx}/{total}] {filename} ({human_size(size)})",
+                total=100, speed="",
+            )
 
             task = SyncTask(
                 file_id=file_id,
@@ -362,14 +394,45 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
                 size=size,
                 sha256=str(row["sha256"]),
             )
-            ok = await coordinator.run(task)
+
+            # Progress callback updates the file bar live during download
+            def on_progress(
+                stage: str, pct: float, speed: str,
+                _fn: str = filename, _sz: int = size, _idx: int = idx,
+                _task = file_task,
+            ) -> None:
+                color = {"download": "green", "upload": "blue", "verify": "yellow"}.get(stage, "green")
+                icon = {"download": "⬇ ", "upload": "⬆ ", "verify": "🔍 "}.get(stage, "")
+                speed_str = f"  @ {speed}" if speed else ""
+                file_progress.update(
+                    _task,
+                    description=f"[{color}][{_idx}/{total}] {icon}{_fn} ({human_size(_sz)}){speed_str}",
+                    completed=pct,
+                    speed="",
+                )
+
+            ok = await coordinator.run(task, progress_callback=on_progress)
+
             if ok:
-                succeeded += 1
+                done += 1
+                completed_lines.append(Text(f"  ✓ {filename} ({human_size(size)}) — OK", style="green"))
             else:
                 failed += 1
-            progress.update(overall, advance=1)
+                completed_lines.append(Text(f"  ✗ {filename} — FAILED", style="red"))
 
-        progress.update(overall, description="[green]✓ Pipeline complete")
+            # Keep last 10 completed visible
+            if len(completed_lines) > 10:
+                completed_lines.pop(0)
+
+            overall_progress.update(overall_task, completed=done + failed)
+
+        # Final: mark pipeline complete
+        file_progress.remove_task(file_task)
+        file_progress.add_task("[green]✓ Pipeline complete", total=100, completed=100, speed="")
+
+    # Restore loguru
+    from hf_sync.logger import setup_logger
+    setup_logger(settings.log_level)
 
     # Summary
     await conn.commit()
@@ -380,17 +443,13 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     summary_table = Table(title="Results", show_header=False)
     summary_table.add_column("Status", style="bold")
     summary_table.add_column("Count")
-    summary_table.add_row("[green]DONE[/green]", str(succeeded))
+    summary_table.add_row("[green]DONE[/green]", str(done))
     summary_table.add_row("[red]FAILED[/red]", str(failed))
-    total_processed = succeeded + failed
-    summary_table.add_row("[dim]Total[/dim]", str(total_processed))
-
+    summary_table.add_row("[dim]Total[/dim]", str(done + failed))
     for row in rows:
         s = str(row["status"])
         c = str(row["cnt"])
-        if s == "DONE":
-            continue  # already shown
-        if s == "FAILED":
+        if s in ("DONE", "FAILED"):
             continue  # already shown
         summary_table.add_row(f"[yellow]{s}[/yellow]", c)
 
@@ -410,10 +469,24 @@ def resume() -> None:
 
 async def _resume_impl() -> None:
     conn = await Database(settings.db_path).connect()
-    await conn.execute("UPDATE files SET status = 'PENDING', updated_at = datetime('now') WHERE status = 'FAILED'")
+    # Reset failed + interrupted states so they get picked up by next start
+    cur = await conn.execute(
+        "SELECT id, local_path FROM files WHERE status IN ('FAILED', 'DOWNLOADING', 'UPLOADING', 'VERIFYING')"
+    )
+    rows = await cur.fetchall()
+    file_list = list(rows)
+    for row in file_list:
+        # Clean up any leftover temp file from interrupted/failed run
+        p = Path(str(row["local_path"]))
+        if p.is_file():
+            p.unlink()
+    await conn.execute(
+        "UPDATE files SET status = 'PENDING', updated_at = datetime('now') "
+        "WHERE status IN ('FAILED', 'DOWNLOADING', 'UPLOADING', 'VERIFYING')"
+    )
     await conn.commit()
     await conn.close()
-    console.print("[green]Failed files reset to PENDING — run 'hf-sync start' to retry[/green]")
+    console.print(f"[green]Reset {len(file_list)} files to PENDING — run 'hf-sync start' to retry[/green]")
 
 
 # ── verify ──────────────────────────────────────────────────────────────
