@@ -14,6 +14,6 @@ class Uploader:
     def __init__(self, rclone: RcloneService) -> None:
         self.rclone = rclone
 
-    def upload(self, local_path: str, remote_dest: str) -> None:
+    async def upload(self, local_path: str, remote_dest: str, progress_callback=None) -> None:
         """Upload a file to the configured remote."""
-        self.rclone.copyto(local_path, remote_dest)
+        await self.rclone.copyto_async(local_path, remote_dest, progress_callback=progress_callback)

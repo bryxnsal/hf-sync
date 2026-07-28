@@ -81,7 +81,7 @@ class Coordinator:
 
         try:
             remote = task.remote_path or f"{task.filename}"
-            self.uploader.upload(task.local_path, remote)
+            await self.uploader.upload(task.local_path, remote, progress_callback=progress_callback)
         except Exception as e:
             logger.error("Upload failed for {}: {}", task.filename, e)
             self.cleanup.remove_local(task.local_path)
