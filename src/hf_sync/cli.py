@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from pathlib import Path
 
 import typer
@@ -282,6 +283,47 @@ def start(
         console.print("\n[yellow]Sync cancelled by user[/yellow]")
 
 
+class _FrozenBar:
+    """Frozen progress bar line for a completed file."""
+
+    def __init__(self, idx: int, total: int, filename: str, size_str: str,
+                 elapsed: str, status: str, is_ok: bool) -> None:
+        self.idx = idx
+        self.total = total
+        self.filename = filename
+        self.size_str = size_str
+        self.elapsed = elapsed
+        self.status = status
+        self.is_ok = is_ok
+
+    def __rich_console__(self, console, options):
+        from rich.text import Text
+        max_width = options.max_width
+        icon = "\u2713" if self.is_ok else "\u2717"
+        prefix = f"[{self.idx}/{self.total}] {icon} {self.filename} ({self.size_str})"
+        if self.is_ok:
+            suffix = f" 100% {self.elapsed} {self.status}"
+        else:
+            suffix = f" {self.elapsed} {self.status}"
+        bar_width = max(max_width - len(prefix) - len(suffix) - 2, 10)
+        bar = "\u2501" * bar_width
+        style = "green" if self.is_ok else "red"
+        text = Text(prefix)
+        text.append(" ")
+        text.append(bar, style=style)
+        text.append(suffix, style=style)
+        return text
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    """Format seconds as MM:SS or HH:MM:SS."""
+    seconds = int(seconds)
+    h, m, s = seconds // 3600, (seconds % 3600) // 60, seconds % 60
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
 async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> None:
     # Suppress console logging first — redirect all to file
     logger.remove()
@@ -332,6 +374,8 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
     from rich.text import Text
 
+    _sep = Text("")
+
     # File progress bar — re-created per file
     file_progress = Progress(
         TextColumn("{task.description}"),
@@ -343,26 +387,15 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     )
     file_task = file_progress.add_task("[dim]Waiting...[/dim]", total=100, speed="")
 
-    overall_progress = Progress(
-        TextColumn("  [cyan]Overall:"),
-        BarColumn(bar_width=30),
-        TextColumn("{task.percentage:>3.0f}%"),
-        TextColumn("{task.completed}/{task.total} files"),
-        console=console,
-    )
-    overall_task = overall_progress.add_task("", total=total)
-
     done = 0
     failed = 0
-    completed_lines: list[Text] = []
+    completed_lines: list[_FrozenBar] = []
 
     def build_display() -> Group:
         items: list = list(completed_lines)
         if items:
-            items.append(Text(""))
+            items.append(_sep)
         items.append(file_progress)
-        items.append(Text(""))
-        items.append(overall_progress)
         return Group(*items)
 
     with Live(build_display(), console=console, refresh_per_second=4):
@@ -411,20 +444,21 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
                     speed="",
                 )
 
-            ok = await coordinator.run(task, progress_callback=on_progress)
+            start = time.time()
+            ok, err = await coordinator.run(task, progress_callback=on_progress)
+            elapsed = _fmt_elapsed(time.time() - start)
+            sz_str = human_size(size)
 
             if ok:
                 done += 1
-                completed_lines.append(Text(f"  ✓ {filename} ({human_size(size)}) — OK", style="green"))
+                completed_lines.append(_FrozenBar(idx, total, filename, sz_str, elapsed, "OK", True))
             else:
                 failed += 1
-                completed_lines.append(Text(f"  ✗ {filename} — FAILED", style="red"))
+                completed_lines.append(_FrozenBar(idx, total, filename, sz_str, elapsed, err, False))
 
             # Keep last 10 completed visible
             if len(completed_lines) > 10:
                 completed_lines.pop(0)
-
-            overall_progress.update(overall_task, completed=done + failed)
 
         # Final: mark pipeline complete
         file_progress.remove_task(file_task)

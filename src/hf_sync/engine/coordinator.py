@@ -35,8 +35,8 @@ class Coordinator:
         self.repo = repo
         self.temp_dir = temp_dir
 
-    async def run(self, task: SyncTask, progress_callback=None) -> bool:
-        """Execute the pipeline for one file. Return True on success.
+    async def run(self, task: SyncTask, progress_callback=None) -> tuple[bool, str]:
+        """Execute the pipeline for one file. Return (success, error_msg).
 
         If progress_callback is provided, it is called with
         (stage: str, pct: float, speed: str) at each phase.
@@ -67,7 +67,7 @@ class Coordinator:
             self.cleanup.remove_local(task.local_path)
             await self.repo.mark_failed(task.file_id)
             await self.repo.add_event(task.file_id, "download_fail", str(e))
-            return False
+            return False, str(e)
 
         await self.repo.add_event(task.file_id, "download_done", task.local_path)
         if progress_callback:
@@ -87,7 +87,7 @@ class Coordinator:
             self.cleanup.remove_local(task.local_path)
             await self.repo.mark_failed(task.file_id)
             await self.repo.add_event(task.file_id, "upload_fail", str(e))
-            return False
+            return False, str(e)
 
         await self.repo.add_event(task.file_id, "upload_done", remote)
         if progress_callback:
@@ -105,7 +105,7 @@ class Coordinator:
             self.cleanup.remove_local(task.local_path)
             await self.repo.mark_failed(task.file_id)
             await self.repo.add_event(task.file_id, "verify_fail", "size/hash mismatch")
-            return False
+            return False, "Verification failed: size/hash mismatch"
 
         await self.repo.add_event(task.file_id, "verify_done")
         if progress_callback:
@@ -116,4 +116,4 @@ class Coordinator:
         await self.repo.mark_done(task.file_id)
         await self.repo.add_event(task.file_id, "cleanup_done", task.local_path)
 
-        return True
+        return True, ""
