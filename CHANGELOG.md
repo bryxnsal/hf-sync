@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-07-29)
+
+### Features
+
+- **cli**: Add --version/-v flag and -h short flag
+  ([#2](https://github.com/bryxnsal/hf-sync/pull/2),
+  [`a1b15e8`](https://github.com/bryxnsal/hf-sync/commit/a1b15e83516fa4a02773ded8777f64cd4b5a6bb6))
+
+* feat(cli): add hf-sync update command
+
+Checks latest version via GitHub API and upgrades via uv or pip.
+
+* docs: add CLAUDE.md for AI agent guidance
+
+* feat(cli): add --version / -v flag
+
+Use @app.callback with invoke_without_command=True to show help when no subcommand given. Eager
+  version callback exits before command dispatch.
+
+* feat(cli): add -h short flag for --help
+
+
 ## v0.1.0 (2026-07-29)
 
 ### Bug Fixes
