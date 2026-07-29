@@ -31,7 +31,7 @@ class RcloneService:
         if result.returncode != 0:
             raise RuntimeError(f"rclone copyto failed: {result.stderr.strip()}")
 
-    async def copyto_async(self, src: str, dest: str, progress_callback: Callable | None = None) -> None:
+    async def copyto_async(self, src: str, dest: str, progress_callback: Callable[[str, float, str], None] | None = None) -> None:
         """Copy a file to remote with real-time progress via --stats=1s."""
         if not progress_callback:
             self.copyto(src, dest)
@@ -46,6 +46,7 @@ class RcloneService:
 
         pct_re = re.compile(r"(\d+)%")
         speed_re = re.compile(r"([\d.]+)\s*([KMGT]i?B)/s")
+        assert process.stderr is not None
         stderr_lines: list[str] = []
 
         while True:

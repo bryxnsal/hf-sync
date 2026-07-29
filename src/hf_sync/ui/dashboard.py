@@ -13,8 +13,8 @@ class Dashboard:
     """Render a live TUI of the sync pipeline."""
 
     def __init__(self) -> None:
-        self.console = Console()
-        self.layout = Layout()
+        self.console: Console = Console()
+        self.layout: Layout = Layout()
         self._live: Live | None = None
 
     def start(self) -> None:

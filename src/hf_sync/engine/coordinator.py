@@ -13,6 +13,7 @@ from hf_sync.engine.uploader import Uploader
 from hf_sync.engine.verifier import Verifier
 from hf_sync.repositories.files import FileRepository
 from hf_sync.types.dto import SyncTask
+from hf_sync.types.dto import ProgressCallback
 from hf_sync.types.enums import Status
 
 
@@ -28,14 +29,14 @@ class Coordinator:
         repo: FileRepository,
         temp_dir: str = "temp",
     ) -> None:
-        self.downloader = downloader
-        self.uploader = uploader
-        self.verifier = verifier
-        self.cleanup = cleanup
-        self.repo = repo
-        self.temp_dir = temp_dir
+        self.downloader: Downloader = downloader
+        self.uploader: Uploader = uploader
+        self.verifier: Verifier = verifier
+        self.cleanup: Cleanup = cleanup
+        self.repo: FileRepository = repo
+        self.temp_dir: str = temp_dir
 
-    async def run(self, task: SyncTask, progress_callback=None) -> tuple[bool, str]:
+    async def run(self, task: SyncTask, progress_callback: ProgressCallback = None) -> tuple[bool, str]:
         """Execute the pipeline for one file. Return (success, error_msg).
 
         If progress_callback is provided, it is called with

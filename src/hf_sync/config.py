@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     db_path: str = str(Path.home() / ".local" / "share" / "hf-sync" / "state.db")
     temp_dir: str = str(Path.home() / ".cache" / "hf-sync" / "temp")
 
-    model_config = SettingsConfigDict(
+    model_config: SettingsConfigDict = SettingsConfigDict(  # pyright: ignore[reportIncompatibleVariableOverride]
         env_file=_CONFIG_PATH,
         env_file_encoding="utf-8",
         extra="ignore",

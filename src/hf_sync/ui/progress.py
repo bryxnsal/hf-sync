@@ -8,9 +8,9 @@ class ProgressTracker:
         self.reset()
 
     def reset(self) -> None:
-        self.current = 0
-        self.total = 0
-        self.stage = ""
+        self.current: int = 0
+        self.total: int = 0
+        self.stage: str = ""
 
     def update(self, n: int = 1) -> None:
         self.current += n

@@ -9,16 +9,20 @@ Commands:
   hf-sync verify             — verify downloaded files
 """
 
+# pyright: reportCallInDefaultInitializer=false
 from __future__ import annotations
 
 import asyncio
 import os
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import typer
 from loguru import logger
-from rich.console import Console
+from rich.console import Console, ConsoleOptions
+from rich.progress import TaskID
+from rich.text import Text
 from rich.table import Table
 
 from hf_sync.config import settings
@@ -121,7 +125,7 @@ def auth(
     if not found:
         lines.append(f"HF_TOKEN={token}")
 
-    _CONFIG_PATH.write_text("\n".join(lines) + "\n")
+    _ = _CONFIG_PATH.write_text("\n".join(lines) + "\n")
     console.print(f"[green]✓ Token saved to {_CONFIG_PATH}[/green]")
 
 
@@ -225,14 +229,13 @@ async def _init_impl(repo_id: str) -> None:
     conn = await Database(settings.db_path).connect()
     repo = FileRepository(conn)
     for f in files:
-        existing = await repo.get_by_name(str(f["filename"]))
-        if existing is None:
-            await repo.insert(
-                filename=str(f["filename"]),
-                size=int(f.get("size", 0)),  # type: ignore[arg-type]
-                status="PENDING",
-                local_path=str(Path(settings.temp_dir) / str(f["filename"])),
-            )
+        fn: str = cast(str, f["filename"])
+        _ = await repo.insert(
+            filename=fn,
+            size=int(cast(int, f.get("size", 0))),  # type: ignore[arg-type]
+            status="PENDING",
+            local_path=str(Path(settings.temp_dir) / fn),
+        )
     await conn.close()
     console.print(f"[green]Scanned {len(files)} files — ready[/green]")
 
@@ -288,17 +291,17 @@ class _FrozenBar:
 
     def __init__(self, idx: int, total: int, filename: str, size_str: str,
                  elapsed: str, status: str, is_ok: bool) -> None:
-        self.idx = idx
-        self.total = total
-        self.filename = filename
-        self.size_str = size_str
-        self.elapsed = elapsed
-        self.status = status
-        self.is_ok = is_ok
+        self.idx: int = idx
+        self.total: int = total
+        self.filename: str = filename
+        self.size_str: str = size_str
+        self.elapsed: str = elapsed
+        self.status: str = status
+        self.is_ok: bool = is_ok
 
-    def __rich_console__(self, console, options):
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> Text:
         from rich.text import Text
-        max_width = options.max_width
+        max_width: int = options.max_width or 0
         icon = "\u2713" if self.is_ok else "\u2717"
         prefix = f"[{self.idx}/{self.total}] {icon} {self.filename} ({self.size_str})"
         if self.is_ok:
@@ -309,9 +312,9 @@ class _FrozenBar:
         bar = "\u2501" * bar_width
         style = "green" if self.is_ok else "red"
         text = Text(prefix)
-        text.append(" ")
-        text.append(bar, style=style)
-        text.append(suffix, style=style)
+        _ = text.append(" ")
+        _ = text.append(bar, style=style)
+        _ = text.append(suffix, style=style)
         return text
 
 
@@ -327,7 +330,7 @@ def _fmt_elapsed(seconds: float) -> str:
 async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> None:
     # Suppress console logging first — redirect all to file
     logger.remove()
-    logger.add("hf-sync.log", level="DEBUG", rotation="10 MB")
+    _ = logger.add("hf-sync.log", level="DEBUG", rotation="10 MB")
 
     Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -338,24 +341,27 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     # Auto-init if DB is empty: scan repo and populate pending files
     cur = await conn.execute("SELECT COUNT(*) as cnt FROM files")
     row = await cur.fetchone()
-    file_count = int(row["cnt"]) if row else 0
+    file_count: int = cast(int, row["cnt"]) if row else 0
     if file_count == 0:
         console.print(f"[dim]Scanning repo {repo_id}...[/dim]")
         hf = HuggingFaceService(settings.hf_token)
         files = hf.list_files(repo_id)
         for f in files:
-            await repo.insert(
-                filename=str(f["filename"]),
-                size=int(f.get("size", 0)),  # type: ignore[arg-type]
-                status="PENDING",
-                local_path=str(Path(settings.temp_dir) / str(f["filename"])),
-            )
+            fn: str = cast(str, f["filename"])
+            existing = await repo.get_by_name(fn)
+            if existing is None:
+                _ = await repo.insert(
+                    filename=fn,
+                    size=int(cast(int, f.get("size", 0))),  # type: ignore[arg-type]
+                    status="PENDING",
+                    local_path=str(Path(settings.temp_dir) / fn),
+                )
         console.print(f"[dim]Found {len(files)} files[/dim]")
 
     # Count total pending
     cur = await conn.execute("SELECT COUNT(*) as cnt FROM files WHERE status = 'PENDING'")
     row = await cur.fetchone()
-    total = int(row["cnt"]) if row else 0
+    total: int = cast(int, row["cnt"]) if row else 0
     if total == 0:
         console.print("[yellow]No files to sync[/yellow]")
         await conn.close()
@@ -392,7 +398,7 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
     completed_lines: list[_FrozenBar] = []
 
     def build_display() -> Group:
-        items: list = list(completed_lines)
+        items: list[Any] = list(completed_lines)
         if items:
             items.append(_sep)
         items.append(file_progress)
@@ -404,11 +410,11 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
             if row is None:
                 break
 
-            file_id = int(row["id"])  # type: ignore[arg-type]
-            filename = str(row["filename"])
+            file_id: int = cast(int, row["id"])
+            filename: str = cast(str, row["filename"])
             src_url = hf.get_signed_url(repo_id, filename)
             remote_file = f"{rclone_remote}:{rclone_path}/{filename}" if rclone_path else f"{rclone_remote}:{filename}"
-            size = int(row["size"])  # type: ignore[arg-type]
+            size: int = cast(int, row["size"])
             idx = done + failed + 1
 
             # Fresh task per file so elapsed timer resets
@@ -422,17 +428,17 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
                 file_id=file_id,
                 filename=filename,
                 source_url=src_url,
-                local_path=str(row["local_path"]),
+                local_path=cast(str, row["local_path"]),
                 remote_path=remote_file,
                 size=size,
-                sha256=str(row["sha256"]),
+                sha256=cast(str, row["sha256"]),
             )
 
             # Progress callback updates the file bar live during download
             def on_progress(
                 stage: str, pct: float, speed: str,
                 _fn: str = filename, _sz: int = size, _idx: int = idx,
-                _task = file_task,
+                _task: TaskID = file_task,
             ) -> None:
                 color = {"download": "green", "upload": "blue", "verify": "yellow"}.get(stage, "green")
                 icon = {"download": "⬇ ", "upload": "⬆ ", "verify": "🔍 "}.get(stage, "")
@@ -458,13 +464,13 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
 
             # Keep last 10 completed visible
             if len(completed_lines) > 10:
-                completed_lines.pop(0)
+                _ = completed_lines.pop(0)
 
             live.update(build_display())
 
         # Final: mark pipeline complete
         file_progress.remove_task(file_task)
-        file_progress.add_task("[green]✓ Pipeline complete", total=100, completed=100, speed="")
+        _ = file_progress.add_task("[green]✓ Pipeline complete", total=100, completed=100, speed="")
 
     # Restore loguru
     from hf_sync.logger import setup_logger
@@ -513,12 +519,12 @@ async def _resume_impl() -> None:
     file_list = list(rows)
     for row in file_list:
         # Clean up any leftover temp file from interrupted/failed run
-        p = Path(str(row["local_path"]))
+        p = Path(cast(str, row["local_path"]))
         if p.is_file():
             p.unlink()
-    await conn.execute(
-        "UPDATE files SET status = 'PENDING', updated_at = datetime('now') "
-        "WHERE status IN ('FAILED', 'DOWNLOADING', 'UPLOADING', 'VERIFYING')"
+    _ = await conn.execute(
+        "UPDATE files SET status = 'PENDING', updated_at = datetime('now')"
+        + " WHERE status IN ('FAILED', 'DOWNLOADING', 'UPLOADING', 'VERIFYING')"
     )
     await conn.commit()
     await conn.close()
@@ -547,9 +553,13 @@ async def _verify_impl() -> None:
     table.add_column("Result")
 
     for row in rows:
-        ok = verifier.verify(str(row["local_path"]), int(row["size"]), str(row["sha256"]))
+        ok = verifier.verify(
+            cast(str, row["local_path"]),
+            cast(int, row["size"]),
+            cast(str, row["sha256"]),
+        )
         tag = "[green]✓[/green]" if ok else "[red]✗[/red]"
-        table.add_row(str(row["filename"]), tag)
+        table.add_row(cast(str, row["filename"]), tag)
         if ok:
             ok_count += 1
         else:

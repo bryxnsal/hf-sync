@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from hf_sync.services.aria2 import Aria2Service
+from hf_sync.types.dto import ProgressCallback as _CB
 
 
 class Downloader:
@@ -25,7 +26,7 @@ class Downloader:
         return gid
 
     def wait_for_completion(self, gid: str, poll_interval: float = 2.0,
-                             progress_callback=None) -> dict[str, str]:
+                             progress_callback: _CB = None) -> dict[str, str]:
         """
         Poll aria2 until download completes or fails.
 

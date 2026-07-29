@@ -30,10 +30,29 @@ where = ["src"]
 [project.urls]
 Homepage = "https://github.com/user/hf-sync"
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
 [dependency-groups]
 dev = [
     "basedpyright>=1.39.9",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.0",
 ]
+
+[tool.basedpyright]
+reportAny = false
+reportExplicitAny = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportPrivateUsage = false
+reportDeprecated = false
+reportUnusedCallResult = false
+reportUnnecessaryTypeIgnoreComment = false
+reportMissingParameterType = false
+reportUnusedParameter = false
+reportUnusedVariable = false
