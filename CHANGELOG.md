@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.4.2 (2026-07-29)
+
+### Bug Fixes
+
+- **install**: Install from release artifact instead of git clone
+  ([#10](https://github.com/bryxnsal/hf-sync/pull/10),
+  [`56d4e6d`](https://github.com/bryxnsal/hf-sync/commit/56d4e6d2a264efc147d27a14f2566e33632f63d0))
+
+Instead of cloning the repo (which generates dev versions like 0.4.1.dev1 from setuptools-scm),
+  download the .tar.gz from the latest GitHub Release and install from that file. This ensures the
+  installed version matches the release tag exactly.
+
+- update.py: download release asset .tar.gz, install via uv/pip - install.sh: fetch latest release
+  from GitHub API, download artifact - tests: rewrite to match new install-paths (tempfile tarball,
+  httpx side_effect)
+
+
 ## v0.4.1 (2026-07-29)
 
 ### Bug Fixes
