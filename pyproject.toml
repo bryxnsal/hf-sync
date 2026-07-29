@@ -58,6 +58,9 @@ reportUnusedCallResult = false
 reportUnnecessaryTypeIgnoreComment = false
 reportMissingParameterType = false
 reportUnusedParameter = false
+reportUnusedImport = false
+reportUnusedFunction = false
+reportUnusedClass = false
 reportUnusedVariable = false
 
 [tool.semantic_release]

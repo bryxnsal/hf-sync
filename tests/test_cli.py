@@ -143,8 +143,8 @@ class TestShowDryRun:
             dest_accessible=True, remote_free_gb=200.0, remote_ok=True,
         )
         buf = StringIO()
-        with patch("hf_sync.cli.DoctorService.dry_run", return_value=report):
-            with patch("hf_sync.cli.console", Console(file=buf, width=120, force_terminal=False)):
+        with patch("hf_sync.cli.shared.display.DoctorService.dry_run", return_value=report):
+            with patch("hf_sync.cli.shared.display.console", Console(file=buf, width=120, force_terminal=False)):
                 _show_dry_run("org/repo", "gdrive:path")
         out = buf.getvalue()
         assert "Dry Run" in out
@@ -162,8 +162,8 @@ class TestShowDryRun:
             dest_accessible=False, remote_free_gb=0.0, remote_ok=False,
         )
         buf = StringIO()
-        with patch("hf_sync.cli.DoctorService.dry_run", return_value=report):
-            with patch("hf_sync.cli.console", Console(file=buf, width=120, force_terminal=False)):
+        with patch("hf_sync.cli.shared.display.DoctorService.dry_run", return_value=report):
+            with patch("hf_sync.cli.shared.display.console", Console(file=buf, width=120, force_terminal=False)):
                 _show_dry_run("org/repo", "gdrive:bad")
         out = buf.getvalue()
         assert "Not enough local disk space" in out
@@ -266,7 +266,7 @@ class TestDoctorCommand:
 
         report = DoctorReport(aria2=True, rclone=True, hf_token=True,
                               drive_access=True, free_space_gb=50.0, permissions_ok=True)
-        with patch("hf_sync.cli.DoctorService") as mock_svc:
+        with patch("hf_sync.cli.commands.doctor.DoctorService") as mock_svc:
             mock_svc.return_value.check_all.return_value = report
             result = cli_runner.invoke(app, ["doctor"])
         assert result.exit_code == 0
@@ -274,7 +274,7 @@ class TestDoctorCommand:
     def test_doctor_with_args(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli._show_dry_run"):
+        with patch("hf_sync.cli.commands.doctor._show_dry_run"):
             result = cli_runner.invoke(app, ["doctor", "org/repo", "gdrive:path"])
         assert result.exit_code == 0
 
@@ -285,7 +285,7 @@ class TestDoctorCommand:
         report = DoctorReport(aria2=False, aria2_error="refused",
                               rclone=True, hf_token=False, hf_token_configured=False,
                               drive_configured=False, free_space_gb=0.0, permissions_ok=True)
-        with patch("hf_sync.cli.DoctorService") as mock_svc:
+        with patch("hf_sync.cli.commands.doctor.DoctorService") as mock_svc:
             mock_svc.return_value.check_all.return_value = report
             result = cli_runner.invoke(app, ["doctor"])
         assert result.exit_code == 0
@@ -299,7 +299,7 @@ class TestDoctorCommand:
                               hf_token_configured=True,
                               drive_configured=False, drive_access=False,
                               free_space_gb=0.0, permissions_ok=True)
-        with patch("hf_sync.cli.DoctorService") as mock_svc:
+        with patch("hf_sync.cli.commands.doctor.DoctorService") as mock_svc:
             mock_svc.return_value.check_all.return_value = report
             result = cli_runner.invoke(app, ["doctor"])
         assert result.exit_code == 0
@@ -314,7 +314,7 @@ class TestDoctorCommand:
             drive_configured=True, drive_access=False, drive_error="remote not found",
             free_space_gb=0.0, permissions_ok=True,
         )
-        with patch("hf_sync.cli.DoctorService") as mock_svc:
+        with patch("hf_sync.cli.commands.doctor.DoctorService") as mock_svc:
             mock_svc.return_value.check_all.return_value = report
             result = cli_runner.invoke(app, ["doctor"])
         assert result.exit_code == 0
@@ -333,8 +333,8 @@ class TestInitCommand:
         async def _fake_init(repo_id: str) -> None:
             return None
 
-        with patch("hf_sync.cli._init_impl", _fake_init):
-            with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.init._init_impl", _fake_init):
+            with patch("hf_sync.cli.commands.init.settings") as m_s:
                 m_s.log_level = "WARNING"
                 m_s.hf_token = "hf_test"
                 result = cli_runner.invoke(app, ["init", "org/repo"])
@@ -350,7 +350,7 @@ class TestStartCommand:
     def test_start_no_token(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.settings") as m_s:
             m_s.log_level = "WARNING"
             m_s.hf_token = ""
             result = cli_runner.invoke(app, ["start", "org/repo", "gdrive:path"])
@@ -360,7 +360,7 @@ class TestStartCommand:
     def test_start_no_repo_id(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.settings") as m_s:
             m_s.log_level = "WARNING"
             m_s.hf_token = "hf_test"
             m_s.hf_repo_id = ""
@@ -371,7 +371,7 @@ class TestStartCommand:
     def test_start_no_dest(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.settings") as m_s:
             m_s.log_level = "WARNING"
             m_s.hf_token = "hf_test"
             m_s.hf_repo_id = "org/repo"
@@ -384,20 +384,20 @@ class TestStartCommand:
     def test_start_dry_run(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.settings") as m_s:
             m_s.log_level = "WARNING"
             m_s.hf_token = "hf_test"
-            with patch("hf_sync.cli._show_dry_run"):
+            with patch("hf_sync.cli.commands.start._show_dry_run"):
                 result = cli_runner.invoke(app, ["start", "org/repo", "gdrive:path", "--dry-run"])
         assert result.exit_code == 0
 
     def test_start_keyboard_interrupt(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.settings") as m_s:
             m_s.log_level = "WARNING"
             m_s.hf_token = "hf_test"
-            with patch("hf_sync.cli._start_impl", side_effect=KeyboardInterrupt):
+            with patch("hf_sync.cli.commands.start._start_impl", side_effect=KeyboardInterrupt):
                 result = cli_runner.invoke(app, ["start", "org/repo", "gdrive:path"])
         assert result.exit_code == 0
         assert "cancelled" in result.output.lower()
@@ -405,13 +405,13 @@ class TestStartCommand:
     def test_start_default_repo_and_dest(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.settings") as m_s:
             m_s.log_level = "WARNING"
             m_s.hf_token = "hf_test"
             m_s.hf_repo_id = "org/repo"
             m_s.rclone_remote = "gdrive"
             m_s.rclone_path = "models"
-            with patch("hf_sync.cli._start_impl"):
+            with patch("hf_sync.cli.commands.start._start_impl"):
                 result = cli_runner.invoke(app, ["start"])
         assert result.exit_code == 0
 
@@ -425,9 +425,9 @@ class TestResumeCommand:
     def test_resume(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.resume.settings") as m_s:
             m_s.log_level = "WARNING"
-            with patch("hf_sync.cli._resume_impl") as m_impl:
+            with patch("hf_sync.cli.commands.resume._resume_impl") as m_impl:
                 result = cli_runner.invoke(app, ["resume"])
         assert result.exit_code == 0
         m_impl.assert_called_once()
@@ -442,9 +442,9 @@ class TestVerifyCommand:
     def test_verify(self, cli_runner):
         from hf_sync.cli import app
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.verify.settings") as m_s:
             m_s.log_level = "WARNING"
-            with patch("hf_sync.cli._verify_impl") as m_impl:
+            with patch("hf_sync.cli.commands.verify._verify_impl") as m_impl:
                 result = cli_runner.invoke(app, ["verify"])
         assert result.exit_code == 0
         m_impl.assert_called_once()
@@ -458,7 +458,7 @@ class TestInitImpl:
 
     @pytest.mark.asyncio
     async def test_init_with_files(self, tmp_path):
-        from hf_sync.cli import _init_impl
+        from hf_sync.cli.commands.init import _init_impl
 
         conn = AsyncMock()
         mock_repo = AsyncMock()
@@ -470,11 +470,11 @@ class TestInitImpl:
         mock_db_cls.init_db = AsyncMock()
         mock_db_cls.return_value = mock_db_instance
 
-        with patch("hf_sync.cli.Database", mock_db_cls):
-            with patch("hf_sync.cli.FileRepository", return_value=mock_repo):
-                with patch("hf_sync.cli.HuggingFaceService") as m_hf:
-                    with patch("hf_sync.cli.Path") as m_path:
-                        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.init.Database", mock_db_cls):
+            with patch("hf_sync.cli.commands.init.FileRepository", return_value=mock_repo):
+                with patch("hf_sync.cli.commands.init.HuggingFaceService") as m_hf:
+                    with patch("hf_sync.cli.commands.init.Path") as m_path:
+                        with patch("hf_sync.cli.commands.init.settings") as m_s:
                             m_s.temp_dir = str(tmp_path / "temp")
                             m_s.db_path = str(tmp_path / "state.db")
                             m_s.hf_token = "hf_test"
@@ -493,36 +493,36 @@ class TestInitImpl:
 
     @pytest.mark.asyncio
     async def test_init_no_token(self, tmp_path):
-        from hf_sync.cli import _init_impl
+        from hf_sync.cli.commands.init import _init_impl
 
         mock_db_cls = MagicMock()
         mock_db_cls.init_db = AsyncMock()
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.init.settings") as m_s:
             m_s.temp_dir = str(tmp_path / "temp")
             m_s.db_path = str(tmp_path / "state.db")
             m_s.hf_token = ""
-            with patch("hf_sync.cli.Database", mock_db_cls):
+            with patch("hf_sync.cli.commands.init.Database", mock_db_cls):
                 await _init_impl("org/repo")
 
     @pytest.mark.asyncio
     async def test_init_no_repo_id(self, tmp_path):
-        from hf_sync.cli import _init_impl
+        from hf_sync.cli.commands.init import _init_impl
 
         mock_db_cls = MagicMock()
         mock_db_cls.init_db = AsyncMock()
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.init.settings") as m_s:
             m_s.temp_dir = str(tmp_path / "temp")
             m_s.db_path = str(tmp_path / "state.db")
             m_s.hf_token = "hf_test"
-            with patch("hf_sync.cli.Database", mock_db_cls):
-                with patch("hf_sync.cli.HuggingFaceService"):
+            with patch("hf_sync.cli.commands.init.Database", mock_db_cls):
+                with patch("hf_sync.cli.commands.init.HuggingFaceService"):
                     await _init_impl("")
 
     @pytest.mark.asyncio
     async def test_init_repo_id_from_settings(self, tmp_path):
-        from hf_sync.cli import _init_impl
+        from hf_sync.cli.commands.init import _init_impl
 
         conn = AsyncMock()
         mock_db_instance = MagicMock()
@@ -531,13 +531,13 @@ class TestInitImpl:
         mock_db_cls.init_db = AsyncMock()
         mock_db_cls.return_value = mock_db_instance
 
-        with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.init.settings") as m_s:
             m_s.temp_dir = str(tmp_path / "temp")
             m_s.db_path = str(tmp_path / "state.db")
             m_s.hf_token = "hf_test"
-            with patch("hf_sync.cli.Database", mock_db_cls):
-                with patch("hf_sync.cli.FileRepository"):
-                    with patch("hf_sync.cli.HuggingFaceService") as m_hf:
+            with patch("hf_sync.cli.commands.init.Database", mock_db_cls):
+                with patch("hf_sync.cli.commands.init.FileRepository"):
+                    with patch("hf_sync.cli.commands.init.HuggingFaceService") as m_hf:
                         m_hf.return_value.list_files.return_value = []
                         await _init_impl("org/repo")
 
@@ -569,9 +569,9 @@ class TestStartImpl:
         mock_db = MagicMock()
         mock_db.connect = AsyncMock(return_value=conn)
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.FileRepository") as m_repo:
-                with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.start.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.start.FileRepository") as m_repo:
+                with patch("hf_sync.cli.commands.start.settings") as m_s:
                     m_s.temp_dir = str(tmp_path / "temp")
                     m_s.db_path = str(tmp_path / "state.db")
                     m_s.aria2_rpc_url = "http://localhost:6800/jsonrpc"
@@ -579,7 +579,7 @@ class TestStartImpl:
                     m_s.log_level = "WARNING"
                     m_s.hf_token = "hf_test"
 
-                    from hf_sync.cli import _start_impl
+                    from hf_sync.cli.commands.start import _start_impl
 
                     await _start_impl("org/repo", "gdrive", "path")
 
@@ -630,15 +630,15 @@ class TestStartImpl:
 
         mock_live = MagicMock()
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.FileRepository", return_value=mock_repo):
-                with patch("hf_sync.cli.HuggingFaceService", return_value=mock_hf):
-                    with patch("hf_sync.cli.Aria2Service"):
-                        with patch("hf_sync.cli.RcloneService"):
-                            with patch("hf_sync.cli.Coordinator", return_value=mock_coordinator):
+        with patch("hf_sync.cli.commands.start.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.start.FileRepository", return_value=mock_repo):
+                with patch("hf_sync.cli.commands.start.HuggingFaceService", return_value=mock_hf):
+                    with patch("hf_sync.cli.commands.start.Aria2Service"):
+                        with patch("hf_sync.cli.commands.start.RcloneService"):
+                            with patch("hf_sync.cli.commands.start.Coordinator", return_value=mock_coordinator):
                                 with patch("rich.live.Live", return_value=mock_live):
-                                    with patch("hf_sync.cli.logger"):
-                                        with patch("hf_sync.cli.settings") as m_s:
+                                    with patch("hf_sync.cli.commands.start.logger"):
+                                        with patch("hf_sync.cli.commands.start.settings") as m_s:
                                             m_s.temp_dir = str(tmp_path / "temp")
                                             m_s.db_path = str(tmp_path / "state.db")
                                             m_s.aria2_rpc_url = "http://localhost:6800/jsonrpc"
@@ -646,7 +646,7 @@ class TestStartImpl:
                                             m_s.log_level = "WARNING"
                                             m_s.hf_token = "hf_test"
 
-                                            from hf_sync.cli import _start_impl
+                                            from hf_sync.cli.commands.start import _start_impl
 
                                             await _start_impl("org/repo", "gdrive", "path")
 
@@ -687,15 +687,15 @@ class TestStartImpl:
 
         mock_live = MagicMock()
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.FileRepository", return_value=mock_repo):
-                with patch("hf_sync.cli.HuggingFaceService", return_value=mock_hf):
-                    with patch("hf_sync.cli.Aria2Service"):
-                        with patch("hf_sync.cli.RcloneService"):
-                            with patch("hf_sync.cli.Coordinator", return_value=mock_coordinator):
+        with patch("hf_sync.cli.commands.start.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.start.FileRepository", return_value=mock_repo):
+                with patch("hf_sync.cli.commands.start.HuggingFaceService", return_value=mock_hf):
+                    with patch("hf_sync.cli.commands.start.Aria2Service"):
+                        with patch("hf_sync.cli.commands.start.RcloneService"):
+                            with patch("hf_sync.cli.commands.start.Coordinator", return_value=mock_coordinator):
                                 with patch("rich.live.Live", return_value=mock_live):
-                                    with patch("hf_sync.cli.logger"):
-                                        with patch("hf_sync.cli.settings") as m_s:
+                                    with patch("hf_sync.cli.commands.start.logger"):
+                                        with patch("hf_sync.cli.commands.start.settings") as m_s:
                                             m_s.temp_dir = str(tmp_path / "temp")
                                             m_s.db_path = str(tmp_path / "state.db")
                                             m_s.aria2_rpc_url = "http://localhost:6800/jsonrpc"
@@ -703,7 +703,7 @@ class TestStartImpl:
                                             m_s.log_level = "WARNING"
                                             m_s.hf_token = "hf_test"
 
-                                            from hf_sync.cli import _start_impl
+                                            from hf_sync.cli.commands.start import _start_impl
 
                                             await _start_impl("org/repo", "gdrive", "path")
 
@@ -742,15 +742,15 @@ class TestStartImpl:
 
         mock_live = MagicMock()
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.FileRepository", return_value=mock_repo):
-                with patch("hf_sync.cli.HuggingFaceService", return_value=mock_hf):
-                    with patch("hf_sync.cli.Aria2Service"):
-                        with patch("hf_sync.cli.RcloneService"):
-                            with patch("hf_sync.cli.Coordinator", return_value=mock_coordinator):
+        with patch("hf_sync.cli.commands.start.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.start.FileRepository", return_value=mock_repo):
+                with patch("hf_sync.cli.commands.start.HuggingFaceService", return_value=mock_hf):
+                    with patch("hf_sync.cli.commands.start.Aria2Service"):
+                        with patch("hf_sync.cli.commands.start.RcloneService"):
+                            with patch("hf_sync.cli.commands.start.Coordinator", return_value=mock_coordinator):
                                 with patch("rich.live.Live", return_value=mock_live):
-                                    with patch("hf_sync.cli.logger"):
-                                        with patch("hf_sync.cli.settings") as m_s:
+                                    with patch("hf_sync.cli.commands.start.logger"):
+                                        with patch("hf_sync.cli.commands.start.settings") as m_s:
                                             m_s.temp_dir = str(tmp_path / "temp")
                                             m_s.db_path = str(tmp_path / "state.db")
                                             m_s.aria2_rpc_url = "http://localhost:6800/jsonrpc"
@@ -758,7 +758,7 @@ class TestStartImpl:
                                             m_s.log_level = "WARNING"
                                             m_s.hf_token = "hf_test"
 
-                                            from hf_sync.cli import _start_impl
+                                            from hf_sync.cli.commands.start import _start_impl
 
                                             await _start_impl("org/repo", "gdrive", "path")
 
@@ -801,15 +801,15 @@ class TestStartImpl:
 
         mock_live = MagicMock()
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.FileRepository", return_value=mock_repo):
-                with patch("hf_sync.cli.HuggingFaceService", return_value=mock_hf):
-                    with patch("hf_sync.cli.Aria2Service"):
-                        with patch("hf_sync.cli.RcloneService"):
-                            with patch("hf_sync.cli.Coordinator", return_value=mock_coordinator):
+        with patch("hf_sync.cli.commands.start.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.start.FileRepository", return_value=mock_repo):
+                with patch("hf_sync.cli.commands.start.HuggingFaceService", return_value=mock_hf):
+                    with patch("hf_sync.cli.commands.start.Aria2Service"):
+                        with patch("hf_sync.cli.commands.start.RcloneService"):
+                            with patch("hf_sync.cli.commands.start.Coordinator", return_value=mock_coordinator):
                                 with patch("rich.live.Live", return_value=mock_live):
-                                    with patch("hf_sync.cli.logger"):
-                                        with patch("hf_sync.cli.settings") as m_s:
+                                    with patch("hf_sync.cli.commands.start.logger"):
+                                        with patch("hf_sync.cli.commands.start.settings") as m_s:
                                             m_s.temp_dir = str(tmp_path / "temp")
                                             m_s.db_path = str(tmp_path / "state.db")
                                             m_s.aria2_rpc_url = "http://localhost:6800/jsonrpc"
@@ -817,7 +817,7 @@ class TestStartImpl:
                                             m_s.log_level = "WARNING"
                                             m_s.hf_token = "hf_test"
 
-                                            from hf_sync.cli import _start_impl
+                                            from hf_sync.cli.commands.start import _start_impl
 
                                             await _start_impl("org/repo", "gdrive", "path")
 
@@ -850,12 +850,12 @@ class TestResumeImpl:
         mock_db = MagicMock()
         mock_db.connect = AsyncMock(return_value=conn)
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.resume.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.resume.settings") as m_s:
                 m_s.log_level = "WARNING"
                 m_s.db_path = str(tmp_path / "state.db")
 
-                from hf_sync.cli import _resume_impl
+                from hf_sync.cli.commands.resume import _resume_impl
 
                 await _resume_impl()
 
@@ -876,12 +876,12 @@ class TestResumeImpl:
         mock_db = MagicMock()
         mock_db.connect = AsyncMock(return_value=conn)
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.settings") as m_s:
+        with patch("hf_sync.cli.commands.resume.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.resume.settings") as m_s:
                 m_s.log_level = "WARNING"
                 m_s.db_path = str(tmp_path / "state.db")
 
-                from hf_sync.cli import _resume_impl
+                from hf_sync.cli.commands.resume import _resume_impl
 
                 await _resume_impl()
 
@@ -908,14 +908,14 @@ class TestVerifyImpl:
         mock_db = MagicMock()
         mock_db.connect = AsyncMock(return_value=conn)
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.Verifier") as m_ver:
+        with patch("hf_sync.cli.commands.verify.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.verify.Verifier") as m_ver:
                 m_ver.return_value.verify.return_value = True
-                with patch("hf_sync.cli.settings") as m_s:
+                with patch("hf_sync.cli.commands.verify.settings") as m_s:
                     m_s.log_level = "WARNING"
                     m_s.db_path = str(tmp_path / "state.db")
 
-                    from hf_sync.cli import _verify_impl
+                    from hf_sync.cli.commands.verify import _verify_impl
 
                     await _verify_impl()
 
@@ -935,14 +935,14 @@ class TestVerifyImpl:
         mock_db = MagicMock()
         mock_db.connect = AsyncMock(return_value=conn)
 
-        with patch("hf_sync.cli.Database", return_value=mock_db):
-            with patch("hf_sync.cli.Verifier") as m_ver:
+        with patch("hf_sync.cli.commands.verify.Database", return_value=mock_db):
+            with patch("hf_sync.cli.commands.verify.Verifier") as m_ver:
                 m_ver.return_value.verify.side_effect = [True, False]
-                with patch("hf_sync.cli.settings") as m_s:
+                with patch("hf_sync.cli.commands.verify.settings") as m_s:
                     m_s.log_level = "WARNING"
                     m_s.db_path = str(tmp_path / "state.db")
 
-                    from hf_sync.cli import _verify_impl
+                    from hf_sync.cli.commands.verify import _verify_impl
 
                     await _verify_impl()
 
