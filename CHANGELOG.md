@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-07-29)
+
+### Features
+
+- Add uninstall.sh script ([#8](https://github.com/bryxnsal/hf-sync/pull/8),
+  [`6e6a76b`](https://github.com/bryxnsal/hf-sync/commit/6e6a76ba29a749fe60611b5a6723a90b27441f7c))
+
+
 ## v0.3.0 (2026-07-29)
 
 ### Features
