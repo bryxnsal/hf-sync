@@ -20,7 +20,10 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(add_completion=False)
+app = typer.Typer(
+    add_completion=False,
+    context_settings={"help_option_names": ["--help", "-h"]},
+)
 
 
 @app.callback(invoke_without_command=True)
