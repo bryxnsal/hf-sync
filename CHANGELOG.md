@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.2.3 (2026-07-29)
+
+### Bug Fixes
+
+- **version**: Move version to _version.py, use setuptools dynamic attr
+  ([#5](https://github.com/bryxnsal/hf-sync/pull/5),
+  [`5ecef9c`](https://github.com/bryxnsal/hf-sync/commit/5ecef9ce20d8fd0b09d30477979157f8e597e0d2))
+
+Root cause: pyproject.toml version never bumped by semantic-release (squash merges from dev
+  overwrite release commits).
+
+Fix: - Create src/hf_sync/_version.py with __version__ - pyproject.toml: use dynamic = ["version"]
+  with attr pointer - semantic-release version_variable points to _version.py - app.py and update.py
+  import __version__ directly - Tests patched accordingly
+
+
 ## v0.2.2 (2026-07-29)
 
 ### Bug Fixes
