@@ -21,14 +21,14 @@ dependencies = [
 hf-sync = "hf_sync.cli:main"
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.dynamic]
-version = {attr = "hf_sync._version.__version__"}
+[tool.setuptools_scm]
+fallback_version = "0.0.0"
 
 [project.urls]
 Homepage = "https://github.com/bryxnsal/hf-sync"
@@ -67,7 +67,6 @@ reportUnusedClass = false
 reportUnusedVariable = false
 
 [tool.semantic_release]
-version_variable = "src/hf_sync/_version.py:__version__"
 branch = "main"
 build_command = "pip install build -q && python -m build"
 changelog_folder = "CHANGELOG.md"

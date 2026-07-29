@@ -961,7 +961,7 @@ class TestUpdateCommand:
         from hf_sync.cli import app
 
         with (
-            patch("hf_sync._version.__version__", "0.1.0"),
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
         ):
             mock_get.return_value.status_code = 200
@@ -976,7 +976,7 @@ class TestUpdateCommand:
         from hf_sync.cli import app
 
         with (
-            patch("hf_sync._version.__version__", "0.1.0"),
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
         ):
@@ -996,7 +996,7 @@ class TestUpdateCommand:
         from hf_sync.cli import app
 
         with (
-            patch("hf_sync._version.__version__", "0.1.0"),
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
             patch.object(sys, "executable", "/usr/bin/python3"),
@@ -1017,7 +1017,7 @@ class TestUpdateCommand:
         from hf_sync.cli import app
 
         with (
-            patch("hf_sync._version.__version__", "0.1.0"),
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get", side_effect=Exception("Network error")),
         ):
             result = cli_runner.invoke(app, ["update"])
@@ -1028,7 +1028,7 @@ class TestUpdateCommand:
         from hf_sync.cli import app
 
         with (
-            patch("hf_sync._version.__version__", "0.1.0"),
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, ["uv"])),
         ):
@@ -1042,7 +1042,7 @@ class TestUpdateCommand:
         from hf_sync.cli import app
 
         with (
-            patch("hf_sync._version.__version__", "0.1.0"),
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
             patch.object(sys, "executable", "/usr/bin/python3"),
@@ -1087,13 +1087,7 @@ class TestMain:
     def test_version_fallback(self, cli_runner):
         from hf_sync.cli import app
 
-        # Simulate the version module missing __version__ attribute
-        with (
-            patch.dict("sys.modules"),
-        ):
-            import types
-            fake_mod = types.ModuleType("hf_sync._version")
-            sys.modules["hf_sync._version"] = fake_mod
+        with patch("importlib.metadata.version", side_effect=Exception("not found")):
             result = cli_runner.invoke(app, ["--version"])
         assert result.exit_code == 0
         assert "hf-sync v0.0.0" in result.output
