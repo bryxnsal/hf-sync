@@ -987,7 +987,7 @@ class TestUpdateCommand:
         assert result.exit_code == 0
         assert "Updated to 0.2.0" in result.output
         mock_run.assert_called_once_with(
-            ["uv", "tool", "upgrade", "hf-sync"],
+            ["uv", "tool", "install", "--from", "https://github.com/bryxnsal/hf-sync.git", "hf-sync", "--upgrade"],
             check=True,
             capture_output=False,
         )
@@ -1010,7 +1010,8 @@ class TestUpdateCommand:
         assert "Updated to 0.2.0" in result.output
         # First call fails (FileNotFoundError), second call is pip
         assert mock_run.call_count == 2
-        assert mock_run.call_args.args[0][:3] == ["/usr/bin/python3", "-m", "pip"]
+        assert mock_run.call_args.args[0] == ["/usr/bin/python3", "-m", "pip", "install", "--upgrade",
+            f"git+https://github.com/bryxnsal/hf-sync.git"]
 
     def test_update_api_failure(self, cli_runner):
         from hf_sync.cli import app
@@ -1023,7 +1024,7 @@ class TestUpdateCommand:
         assert result.exit_code == 1
         assert "Failed to check latest version" in result.output
 
-    def test_update_uv_upgrade_fails(self, cli_runner):
+    def test_update_uv_install_fails(self, cli_runner):
         from hf_sync.cli import app
 
         with (
