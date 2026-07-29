@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.4.4 (2026-07-29)
+
+### Bug Fixes
+
+- **install**: Install from git tag instead of release artifact
+  ([#12](https://github.com/bryxnsal/hf-sync/pull/12),
+  [`83c9d5e`](https://github.com/bryxnsal/hf-sync/commit/83c9d5edeaf3763ab2aac8657ca002b1bae85257))
+
+Release assets are empty (semantic-release doesn't upload build artifacts). Install from
+  git+REPO@TAG instead, pinning to exact tag to avoid dev suffix.
+
+
 ## v0.4.3 (2026-07-29)
 
 ### Bug Fixes
