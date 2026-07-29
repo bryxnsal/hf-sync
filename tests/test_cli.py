@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from io import StringIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -949,6 +951,111 @@ class TestVerifyImpl:
         assert m_ver.return_value.verify.call_count == 2
         assert conn.close.await_count == 1
 
+# ── update ──────────────────────────────────────────────────────────────
+
+
+class TestUpdateCommand:
+    """Update command via CliRunner."""
+
+    def test_update_already_up_to_date(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
+            patch("httpx.get") as mock_get,
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = {"tag_name": "v0.1.0"}
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 0
+        assert "Current version: 0.1.0" in result.output
+        assert "Latest version:  0.1.0" in result.output
+        assert "Already up to date" in result.output
+
+    def test_update_new_version_available(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
+            patch("httpx.get") as mock_get,
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = {"tag_name": "v0.2.0"}
+            mock_run.return_value = MagicMock()
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 0
+        assert "Updated to 0.2.0" in result.output
+        mock_run.assert_called_once_with(
+            ["uv", "tool", "upgrade", "hf-sync"],
+            check=True,
+            capture_output=False,
+        )
+
+    def test_update_new_version_fallback_pip(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
+            patch("httpx.get") as mock_get,
+            patch("subprocess.run") as mock_run,
+            patch.object(sys, "executable", "/usr/bin/python3"),
+        ):
+            # uv not found → fallback to pip
+            mock_run.side_effect = [FileNotFoundError(), MagicMock()]
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = {"tag_name": "v0.2.0"}
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 0
+        assert "Updated to 0.2.0" in result.output
+        # First call fails (FileNotFoundError), second call is pip
+        assert mock_run.call_count == 2
+        assert mock_run.call_args.args[0][:3] == ["/usr/bin/python3", "-m", "pip"]
+
+    def test_update_api_failure(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
+            patch("httpx.get", side_effect=Exception("Network error")),
+        ):
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 1
+        assert "Failed to check latest version" in result.output
+
+    def test_update_uv_upgrade_fails(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
+            patch("httpx.get") as mock_get,
+            patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, ["uv"])),
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = {"tag_name": "v0.2.0"}
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 1
+        assert "uv upgrade failed" in result.output
+
+    def test_update_pip_upgrade_fails(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
+            patch("httpx.get") as mock_get,
+            patch("subprocess.run") as mock_run,
+            patch.object(sys, "executable", "/usr/bin/python3"),
+        ):
+            mock_run.side_effect = [
+                FileNotFoundError(),
+                subprocess.CalledProcessError(1, ["pip"]),
+            ]
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = {"tag_name": "v0.2.0"}
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 1
+        assert "pip upgrade failed" in result.output
+
 
 # ── main ───────────────────────────────────────────────────────────────
 
@@ -961,3 +1068,42 @@ class TestMain:
 
         assert main is not None
         assert app is not None
+
+    def test_version_flag(self, cli_runner):
+        from hf_sync.cli import app
+
+        result = cli_runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert "hf-sync v" in result.output
+
+    def test_version_short_flag(self, cli_runner):
+        from hf_sync.cli import app
+
+        result = cli_runner.invoke(app, ["-v"])
+        assert result.exit_code == 0
+        assert "hf-sync v" in result.output
+
+    def test_version_fallback(self, cli_runner):
+        from hf_sync.cli import app
+
+        with patch("importlib.metadata.version", side_effect=Exception("not found")):
+            result = cli_runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert "hf-sync v0.0.0" in result.output
+
+    def test_no_command_shows_help(self, cli_runner):
+        from hf_sync.cli import app
+
+        result = cli_runner.invoke(app, [])
+        assert result.exit_code == 0
+        assert "Usage:" in result.output
+        assert "Commands" in result.output
+        assert "--version" in result.output
+
+    def test_version_flag_before_command(self, cli_runner):
+        from hf_sync.cli import app
+
+        # --version before any command should exit directly without running command
+        result = cli_runner.invoke(app, ["--version", "doctor"])
+        assert result.exit_code == 0
+        assert "hf-sync v" in result.output
