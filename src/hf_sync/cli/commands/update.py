@@ -12,6 +12,8 @@ import typer
 
 from hf_sync.cli.app import app, console
 
+_REPO = "https://github.com/bryxnsal/hf-sync.git"
+
 
 def _parse_tag(tag: str) -> tuple[int, ...]:
     """Parse 'v1.2.3' → (1,2,3) for comparison."""
@@ -48,14 +50,14 @@ def update() -> None:
     console.print("[yellow]Updating...[/yellow]")
 
     try:
-        # Try uv tool upgrade first
+        # Try uv tool install --from <repo> --upgrade
         subprocess.run(
-            ["uv", "tool", "upgrade", "hf-sync"],
+            ["uv", "tool", "install", "--from", _REPO, "hf-sync", "--upgrade"],
             check=True,
             capture_output=False,
         )
     except FileNotFoundError:
-        # Fallback to pip
+        # Fallback to pip install from git repo
         try:
             subprocess.run(
                 [
@@ -64,7 +66,7 @@ def update() -> None:
                     "pip",
                     "install",
                     "--upgrade",
-                    "hf-sync",
+                    f"git+{_REPO}",
                 ],
                 check=True,
                 capture_output=False,
