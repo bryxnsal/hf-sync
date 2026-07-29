@@ -14,20 +14,23 @@ fi
 echo "==> hf-sync installer"
 
 # Fetch latest release info
-LATEST_JSON="$(curl -sf "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null || true)"
+LATEST_JSON="$(curl -sfL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null || true)"
 if [ -z "$LATEST_JSON" ]; then
-  echo "✗ Failed to fetch latest release info"
+  echo "✗ Failed to fetch latest release info from GitHub API"
+  echo "  Check: curl -sfL https://api.github.com/repos/$REPO/releases/latest"
   exit 1
 fi
 
-TAG="$(echo "$LATEST_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "//;s/".*//')"
-VER="$(echo "$TAG" | sed 's/^v//')"
-URL="$(echo "$LATEST_JSON" | grep '"browser_download_url"' | grep '\.tar\.gz' | head -1 | sed 's/.*"browser_download_url": "//;s/".*//')"
-
-if [ -z "$TAG" ] || [ -z "$URL" ]; then
-  echo "✗ Could not determine latest release"
+TAG="$(echo "$LATEST_JSON" | grep '"tag_name":' | head -1 | sed 's/.*"tag_name": "//;s/".*//')"
+if [ -z "$TAG" ]; then
+  echo "✗ Could not find tag_name in response:"
+  echo "$LATEST_JSON" | head -c 500
+  echo
   exit 1
 fi
+
+VER="${TAG#v}"
+URL="https://github.com/$REPO/releases/download/$TAG/hf_sync-$VER.tar.gz"
 
 # ---- uv (recommended) ----
 if command -v uv &>/dev/null; then
