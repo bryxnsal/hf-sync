@@ -1,6 +1,6 @@
 [project]
 name = "hf-sync"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Sync Hugging Face repos to cloud storage via aria2 + rclone"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,6 +26,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "hf_sync._version.__version__"}
 
 [project.urls]
 Homepage = "https://github.com/bryxnsal/hf-sync"
@@ -64,7 +67,7 @@ reportUnusedClass = false
 reportUnusedVariable = false
 
 [tool.semantic_release]
-version_variable = "pyproject.toml:version"
+version_variable = "src/hf_sync/_version.py:__version__"
 branch = "main"
 build_command = "pip install build -q && python -m build"
 changelog_folder = "CHANGELOG.md"
