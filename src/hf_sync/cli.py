@@ -398,7 +398,7 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
         items.append(file_progress)
         return Group(*items)
 
-    with Live(build_display(), console=console, refresh_per_second=4):
+    with Live(build_display(), console=console, refresh_per_second=4) as live:
         while True:
             row = await repo.get_pending()
             if row is None:
@@ -459,6 +459,8 @@ async def _start_impl(repo_id: str, rclone_remote: str, rclone_path: str) -> Non
             # Keep last 10 completed visible
             if len(completed_lines) > 10:
                 completed_lines.pop(0)
+
+            live.update(build_display())
 
         # Final: mark pipeline complete
         file_progress.remove_task(file_task)
