@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.2.4 (2026-07-29)
+
+### Bug Fixes
+
+- **version**: Use setuptools-scm to derive version from git tags
+  ([#6](https://github.com/bryxnsal/hf-sync/pull/6),
+  [`5acc0e7`](https://github.com/bryxnsal/hf-sync/commit/5acc0e7ed89da8a76ec22df4aa1a5605905e0f9e))
+
+Remove _version.py, version_variable. Remove reliance on manual version bumps that never worked
+  (semantic-release tags but doesn't update files). Version now always correct at build time from
+  git tag.
+
+app.py and update.py use importlib.metadata.version() which reads from installed package metadata
+  (correct after scm build).
+
+
 ## v0.2.3 (2026-07-29)
 
 ### Bug Fixes
