@@ -30,16 +30,21 @@ brew install aria2 rclone
 
 ## Instalación
 
+### One-liner (recomendado)
+
 ```bash
-# Desde el repositorio
+curl -fsSL https://raw.githubusercontent.com/bryxnsal/hf-sync/main/install.sh | bash
+```
+
+Detecta `uv` o `pip3` automáticamente e instala `hf-sync` como comando global.
+
+### Manual
+
+```bash
 git clone https://github.com/bryxnsal/hf-sync.git
 cd hf-sync
 uv sync
-
-# Opcional: instalar como comando global
 uv tool install .
-
-# Probar
 hf-sync doctor
 ```
 
