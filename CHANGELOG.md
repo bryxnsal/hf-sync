@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-07-29)
+
+### Bug Fixes
+
+- **update**: Use git URL for uv/pip upgrade instead of local path
+  ([#3](https://github.com/bryxnsal/hf-sync/pull/3),
+  [`61e44a2`](https://github.com/bryxnsal/hf-sync/commit/61e44a24e32039cfc80990da12f0ec96499badc2))
+
+uv tool upgrade hf-sync fails when package installed from local path. Fix uses: uv tool install
+  --from <repo-url> hf-sync --upgrade. Pip fallback also uses git+URL instead of bare package name.
+
+
 ## v0.2.0 (2026-07-29)
 
 ### Features
