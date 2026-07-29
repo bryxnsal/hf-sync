@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from importlib.metadata import version as pkg_version
+from hf_sync._version import __version__
 
 import httpx
 import typer
@@ -24,7 +24,7 @@ def _parse_tag(tag: str) -> tuple[int, ...]:
 @app.command()
 def update() -> None:
     """Update hf-sync to the latest version."""
-    current = pkg_version("hf-sync")
+    current = __version__
     console.print(f"Current version: [bold]{current}[/bold]")
 
     # Fetch latest release from GitHub
