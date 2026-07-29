@@ -6,38 +6,50 @@ set -euo pipefail
 REPO="bryxnsal/hf-sync"
 BRANCH="${1:-main}"
 
-# Detect if already installed (for messaging)
+# Get current version if already installed
+CURRENT=""
 if command -v hf-sync &>/dev/null; then
-  ACTION="Updating"
-  DONE="✓ hf-sync updated"
-else
-  ACTION="Installing"
-  DONE="✓ hf-sync installed"
+  CURRENT="$(hf-sync --version 2>/dev/null | sed 's/^hf-sync v//;s/[^0-9.]//g' || true)"
 fi
 
 echo "==> hf-sync installer"
 
 # ---- uv (recommended) ----
 if command -v uv &>/dev/null; then
-  echo "--> $ACTION via uv"
+  echo "--> Installing via uv"
   tmp="$(mktemp -d)"
   git clone --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$tmp" 2>/dev/null || {
     echo "✗ Failed to clone repo. Check branch name and network."
     rm -rf "$tmp"
     exit 1
   }
+  NEW_VER="$(cd "$tmp" && git tag --points-at HEAD 2>/dev/null | head -1 | sed 's/^v//')"
+  [ -z "$NEW_VER" ] && NEW_VER="dev ($BRANCH)"
+
+  if [ -n "$CURRENT" ]; then
+    echo "  Current: $CURRENT  →  New: $NEW_VER"
+  else
+    echo "  Version: $NEW_VER"
+  fi
+
   uv tool install --reinstall "$tmp" --python 3.12 2>/dev/null || uv tool install "$tmp" --python 3.12
   rm -rf "$tmp"
-  echo "$DONE"
+  echo "✓ hf-sync installed ($NEW_VER)"
   hf-sync doctor 2>/dev/null || echo "  Run: hf-sync doctor"
   exit 0
 fi
 
 # ---- pip3 (fallback) ----
 if command -v pip3 &>/dev/null; then
-  echo "--> $ACTION via pip3"
+  NEW_VER="dev ($BRANCH)"
+  if [ -n "$CURRENT" ]; then
+    echo "  Current: $CURRENT  →  New: $NEW_VER"
+  else
+    echo "  Version: $NEW_VER"
+  fi
+  echo "--> Installing via pip3"
   pip3 install "git+https://github.com/$REPO.git@$BRANCH"
-  echo "$DONE"
+  echo "✓ hf-sync installed ($NEW_VER)"
   hf-sync doctor 2>/dev/null || echo "  Run: hf-sync doctor"
   exit 0
 fi
