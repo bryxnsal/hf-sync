@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.4.1 (2026-07-29)
+
+### Bug Fixes
+
+- **update**: Detect dev builds ahead of latest release
+  ([#9](https://github.com/bryxnsal/hf-sync/pull/9),
+  [`ac9c782`](https://github.com/bryxnsal/hf-sync/commit/ac9c78242ccfbc2057690ce78510f892f966847a))
+
+### Documentation
+
+- Add uninstall section to README
+  ([`1a41c28`](https://github.com/bryxnsal/hf-sync/commit/1a41c28d2b4040bfa047edfb1d317a77b0b7f9a4))
+
+
 ## v0.4.0 (2026-07-29)
 
 ### Features
