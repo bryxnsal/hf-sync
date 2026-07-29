@@ -11,7 +11,8 @@ console = Console()
 def _version_callback(value: bool) -> None:
     if value:
         try:
-            from hf_sync._version import __version__ as ver
+            from importlib.metadata import version as _v
+            ver = _v("hf-sync")
         except Exception:
             ver = "0.0.0"
         console.print(f"hf-sync v{ver}")
