@@ -12,6 +12,12 @@ wheels/
 # Runtime data / logs
 data/
 temp/
+*.log
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
 
 # Environment (user-specific)
 .env
