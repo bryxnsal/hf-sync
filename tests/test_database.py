@@ -86,6 +86,71 @@ class TestDatabase:
         assert Path(path).parent.exists()
 
 
+class TestDatabaseConfig:
+    def test_sync_get_config_returns_none_if_no_db(self, tmp_path):
+        from hf_sync.database import sync_get_config
+
+        path = str(tmp_path / "nonexistent" / "no.db")
+        assert sync_get_config(path, "hf_token") is None
+
+    def test_sync_get_config_returns_none_if_no_key(self, tmp_path):
+        from hf_sync.database import sync_get_config
+
+        path = str(tmp_path / "empty.db")
+        # Create DB with schema first
+        import asyncio
+        asyncio.run(Database.init_db(path))
+        assert sync_get_config(path, "hf_token") is None
+
+    def test_sync_get_config_returns_value(self, tmp_path):
+        from hf_sync.database import sync_get_config
+
+        path = str(tmp_path / "val.db")
+        import asyncio
+        asyncio.run(Database.init_db(path))
+        import sqlite3
+        conn = sqlite3.connect(path)
+        conn.execute("INSERT INTO config (key, value) VALUES (?, ?)", ("hf_token", "hf_secret"))
+        conn.commit()
+        conn.close()
+        assert sync_get_config(path, "hf_token") == "hf_secret"
+
+    @pytest.mark.asyncio
+    async def test_get_config(self, tmp_path):
+        path = str(tmp_path / "get_config.db")
+        db = Database(path)
+        await db.set_config("hf_token", "hf_value")
+        val = await db.get_config("hf_token")
+        assert val == "hf_value"
+
+    @pytest.mark.asyncio
+    async def test_get_config_missing_key(self, tmp_path):
+        path = str(tmp_path / "missing_key.db")
+        db = Database(path)
+        val = await db.get_config("nonexistent")
+        assert val is None
+
+    @pytest.mark.asyncio
+    async def test_set_config_upsert(self, tmp_path):
+        path = str(tmp_path / "upsert.db")
+        db = Database(path)
+        await db.set_config("hf_token", "first")
+        await db.set_config("hf_token", "second")
+        val = await db.get_config("hf_token")
+        assert val == "second"
+
+    @pytest.mark.asyncio
+    async def test_config_table_exists_in_schema(self, tmp_path):
+        path = str(tmp_path / "schema_config.db")
+        db = Database(path)
+        conn = await db.connect()
+        cur = await conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='config'"
+        )
+        assert await cur.fetchone() is not None
+        await conn.close()
+
+
 class TestFileRecord:
     def test_defaults(self):
         r = FileRecord(filename="test.bin")

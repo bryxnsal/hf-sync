@@ -68,6 +68,25 @@ class TestListFiles:
         assert files == []
 
 
+class TestValidateToken:
+    @patch("hf_sync.services.huggingface.HfApi")
+    def test_valid_token(self, mock_hf_api: MagicMock):
+        mock_instance = MagicMock()
+        mock_instance.whoami.return_value = {"name": "testuser"}
+        mock_hf_api.return_value = mock_instance
+        svc = HuggingFaceService(token="hf_good")
+        assert svc.validate_token() is True
+        mock_instance.whoami.assert_called_once()
+
+    @patch("hf_sync.services.huggingface.HfApi")
+    def test_invalid_token(self, mock_hf_api: MagicMock):
+        mock_instance = MagicMock()
+        mock_instance.whoami.side_effect = Exception("Unauthorized")
+        mock_hf_api.return_value = mock_instance
+        svc = HuggingFaceService(token="hf_bad")
+        assert svc.validate_token() is False
+
+
 class TestGetSignedUrl:
     @patch("hf_sync.services.huggingface.hf_hub_url")
     def test_get_signed_url(self, mock_url: MagicMock):

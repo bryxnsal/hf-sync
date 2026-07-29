@@ -68,6 +68,28 @@ class Database:
         await conn.commit()
         await conn.close()
 
+    async def get_config(self, key: str) -> str | None:
+        """Get a config value by key."""
+        conn = await self.connect()
+        try:
+            cur = await conn.execute("SELECT value FROM config WHERE key = ?", (key,))
+            row = await cur.fetchone()
+            return row[0] if row else None
+        finally:
+            await conn.close()
+
+    async def set_config(self, key: str, value: str) -> None:
+        """Upsert a config value."""
+        conn = await self.connect()
+        try:
+            await conn.execute(
+                "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS files (
@@ -90,4 +112,23 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (file_id) REFERENCES files(id)
 );
+
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+
+def sync_get_config(db_path: str, key: str) -> str | None:
+    """Synchronous key lookup for startup — uses stdlib sqlite3.
+    Returns None if DB/table doesn't exist yet or key not found."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.execute("SELECT value FROM config WHERE key = ?", (key,))
+        row = cur.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except (sqlite3.OperationalError, Exception):
+        return None

@@ -44,3 +44,12 @@ class HuggingFaceService:
     def get_signed_url(self, repo_id: str, filename: str) -> str:
         """Get a signed (download) URL for a file."""
         return hf_hub_url(repo_id, filename)
+
+    def validate_token(self) -> bool:
+        """Check if the configured token is valid by calling whoami().
+        Returns True if valid, False otherwise."""
+        try:
+            self.api.whoami()
+            return True
+        except Exception:
+            return False

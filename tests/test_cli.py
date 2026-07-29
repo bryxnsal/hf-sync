@@ -176,36 +176,82 @@ class TestShowDryRun:
 class TestAuthCommand:
     """Auth command via CliRunner."""
 
-    def test_auth_new_file(self, cli_runner, tmp_path):
+    def test_auth_valid_token(self, cli_runner, tmp_path):
         from hf_sync.cli import app
 
-        config = tmp_path / ".env"
-        with patch("hf_sync.cli._CONFIG_PATH", config):
+        with (
+            patch("huggingface_hub.HfApi.whoami") as mock_whoami,
+            patch("hf_sync.database.Database.set_config") as mock_set,
+        ):
             result = cli_runner.invoke(app, ["auth", "hf_test123"])
         assert result.exit_code == 0
-        assert "Token saved" in result.output
-        assert config.read_text() == "HF_TOKEN=hf_test123\n"
+        assert "Token validated and saved" in result.output
+        mock_whoami.assert_called_once()
+        mock_set.assert_awaited_once_with("hf_token", "hf_test123")
 
-    def test_auth_replaces_existing(self, cli_runner, tmp_path):
+    def test_auth_invalid_token(self, cli_runner, tmp_path):
         from hf_sync.cli import app
 
-        config = tmp_path / ".env"
-        config.write_text("HF_TOKEN=old_token\nOTHER=keep\n")
-        with patch("hf_sync.cli._CONFIG_PATH", config):
-            result = cli_runner.invoke(app, ["auth", "hf_new456"])
-        assert result.exit_code == 0
-        content = config.read_text()
-        assert "HF_TOKEN=hf_new456" in content
-        assert "OTHER=keep" in content
+        with (
+            patch("huggingface_hub.HfApi.whoami", side_effect=Exception("Invalid token")),
+            patch("hf_sync.database.Database.set_config"),
+        ):
+            result = cli_runner.invoke(app, ["auth", "hf_bad"])
+        assert result.exit_code == 1
+        assert "Token validation failed" in result.output
 
     def test_auth_warns_non_hf_token(self, cli_runner, tmp_path):
         from hf_sync.cli import app
 
-        config = tmp_path / ".env"
-        with patch("hf_sync.cli._CONFIG_PATH", config):
+        with (
+            patch("huggingface_hub.HfApi.whoami"),
+            patch("hf_sync.database.Database.set_config"),
+        ):
             result = cli_runner.invoke(app, ["auth", "bad_token"])
         assert result.exit_code == 0
         assert "should start with hf_" in result.output
+
+
+# ── config ──────────────────────────────────────────────────────────────
+
+
+class TestConfigCommand:
+    """Config command via CliRunner."""
+
+    def test_config_sets_values(self, cli_runner):
+        from hf_sync.cli import app
+        from hf_sync.config import settings
+
+        # Simulate user input for each prompt
+        inputs = "my-repo\nhttp://custom:6800/jsonrpc\n\nmyremote\nmypath\n"
+        with (
+            patch("builtins.input", side_effect=inputs.split("\n")),
+            patch("hf_sync.database.Database.set_config") as mock_set,
+        ):
+            result = cli_runner.invoke(app, ["config"])
+        assert result.exit_code == 0
+        assert "Configuration saved to DB" in result.output
+        # Verify all non-empty inputs were saved
+        assert mock_set.await_count == 4
+        mock_set.assert_any_await("hf_repo_id", "my-repo")
+        mock_set.assert_any_await("aria2_rpc_url", "http://custom:6800/jsonrpc")
+        mock_set.assert_any_await("rclone_remote", "myremote")
+        mock_set.assert_any_await("rclone_path", "mypath")
+        # aria2_rpc_secret was left empty (Enter pressed) — not saved
+
+    def test_config_skips_empty_input(self, cli_runner):
+        from hf_sync.cli import app
+
+        # All empty inputs (just press Enter for each)
+        inputs = "\n\n\n\n\n"
+        with (
+            patch("builtins.input", side_effect=inputs.split("\n")),
+            patch("hf_sync.database.Database.set_config") as mock_set,
+        ):
+            result = cli_runner.invoke(app, ["config"])
+        assert result.exit_code == 0
+        assert "Configuration saved to DB" in result.output
+        mock_set.assert_not_awaited()
 
 
 # ── doctor ─────────────────────────────────────────────────────────────

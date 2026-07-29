@@ -69,11 +69,36 @@ Eso es todo. aria2 y rclone usan sus configuraciones por defecto.
 
 ### `hf-sync auth <token>`
 
-Guarda el token de Hugging Face en el archivo de configuración. Crea `~/.config/hf-sync/.env` si no existe.
+Guarda el token de Hugging Face en la base de datos local (validado contra la API de HF).
 
 ```bash
 hf-sync auth hf_xxxxxxxxxxxx
 ```
+
+### `hf-sync config`
+
+Configura settings de forma interactiva (Enter para mantener valor por defecto). Los valores se guardan en la base de datos local.
+
+```bash
+hf-sync config
+```
+
+Las variables disponibles son:
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `HF_REPO_ID` | — | ID del repo. Obligatorio si no se pasa en CLI |
+| `ARIA2_RPC_URL` | `http://localhost:6800/jsonrpc` | URL del RPC de aria2 |
+| `ARIA2_RPC_SECRET` | — | Secreto RPC de aria2 |
+| `RCLONE_REMOTE` | — | Remote de rclone. Obligatorio si no se pasa en CLI |
+| `RCLONE_PATH` | — | Ruta dentro del remote |
+
+La prioridad de configuración es:
+
+1. **Argumentos CLI** — por invocación
+2. **Variables de entorno** — `export HF_REPO_ID=...`
+3. **Base de datos** — persistente vía `hf-sync config`
+4. **Valores por defecto** — hardcodeados
 
 ### `hf-sync doctor`
 
@@ -160,9 +185,10 @@ Tres formas de configurar, de mayor a menor prioridad:
 
 1. **Argumentos CLI** — por invocación
 2. **Variables de entorno** — `export HF_TOKEN=...`
-3. **Archivo `.env`** — persistente en `~/.config/hf-sync/.env`
+3. **Base de datos** — persistente vía `hf-sync auth` y `hf-sync config`
+4. **Valores por defecto** — hardcodeados
 
-### Sin archivo de configuración
+### Sin configuración persistente
 
 Para uso puntual, solo necesitas el token:
 
@@ -173,42 +199,35 @@ hf-sync start "databricks/dolly-v2-3b" "googledrive:models/dolly"
 
 El resto tiene valores por defecto que funcionan si aria2 y rclone están configurados.
 
-### Con archivo `.env` (persistente)
-
-Crea `~/.config/hf-sync/.env`:
+### Con configuración persistente (DB)
 
 ```bash
-mkdir -p ~/.config/hf-sync
-cat > ~/.config/hf-sync/.env << 'EOF'
-HF_TOKEN=hf_xxxxxxxxxxxx
-HF_REPO_ID=databricks/dolly-v2-3b
-RCLONE_REMOTE=googledrive
-RCLONE_PATH=models/dolly
-EOF
+# Token (validado contra HF API)
+hf-sync auth hf_xxxxxxxxxxxx
+
+# Settings interactivos (Enter para mantener valor)
+hf-sync config
 ```
 
-Así puedes solo escribir:
+Luego puedes solo escribir:
 
 ```bash
 hf-sync start
 ```
 
-### Variables disponibles
+### Variables de entorno
 
-| Variable | Obligatoria | Default | Descripción |
-|----------|-------------|---------|-------------|
-| `HF_TOKEN` | ✅ | — | Token de Hugging Face (read) |
-| `HF_REPO_ID` | depende | — | ID del repo. Obligatorio si no se pasa en CLI |
-| `ARIA2_RPC_URL` | ❌ | `http://localhost:6800/jsonrpc` | URL del RPC de aria2 |
-| `ARIA2_RPC_SECRET` | ❌ | — | Secreto RPC de aria2 |
-| `RCLONE_REMOTE` | depende | — | Remote de rclone. Obligatorio si no se pasa en CLI |
-| `RCLONE_PATH` | ❌ | — | Ruta dentro del remote. Se puede pasar como parte del destino |
+Cualquier setting puede sobrescribirse vía variable de entorno (tiene prioridad sobre DB):
 
-### Ruta personalizada del `.env`
-
-```bash
-export HF_SYNC_CONFIG=/ruta/personalizada/.env
-```
+| Variable | Descripción |
+|----------|-------------|
+| `HF_TOKEN` | Token de Hugging Face (read) |
+| `HF_REPO_ID` | ID del repo |
+| `ARIA2_RPC_URL` | URL del RPC de aria2 |
+| `ARIA2_RPC_SECRET` | Secreto RPC de aria2 |
+| `RCLONE_REMOTE` | Remote de rclone |
+| `RCLONE_PATH` | Ruta dentro del remote |
+| `LOG_LEVEL` | Nivel de log (`INFO`, `DEBUG`, etc.) |
 
 ### Servicios externos
 

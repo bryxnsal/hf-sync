@@ -1,7 +1,8 @@
 """CLI entry point using Typer.
 
 Commands:
-  hf-sync auth <token>       — save HF token to config file
+  hf-sync auth <token>       — save HF token to DB (with validation)
+  hf-sync config             — interactively configure settings in DB
   hf-sync doctor             — check system health
   hf-sync init [repo_id]     — create DB, index repo files
   hf-sync start [repo_id] [dest]  — run sync pipeline (--dry-run for pre-flight)
@@ -13,7 +14,6 @@ Commands:
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -40,12 +40,6 @@ from hf_sync.services.huggingface import HuggingFaceService
 from hf_sync.services.rclone import RcloneService
 from hf_sync.types.dto import SyncTask
 from hf_sync.utils.bytes import human_size
-
-# Ruta del archivo de configuración (misma lógica que en config.py)
-_CONFIG_PATH = Path(os.environ.get(
-    "HF_SYNC_CONFIG",
-    str(Path.home() / ".config" / "hf-sync" / ".env"),
-))
 
 console = Console()
 app = typer.Typer()
@@ -104,32 +98,74 @@ def auth(
         help="Hugging Face token (hf_...)",
     ),
 ) -> None:
-    """Save HF token to config file."""
-    _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-
+    """Save HF token to DB with validation."""
     if not token.startswith("hf_"):
         console.print("[yellow]Token should start with hf_[/yellow]")
 
-    # Read existing .env or start fresh
-    lines: list[str] = []
-    if _CONFIG_PATH.exists():
-        lines = _CONFIG_PATH.read_text().splitlines()
+    from huggingface_hub import HfApi
 
-    # Reemplazar o agregar HF_TOKEN
-    found = False
-    for i, line in enumerate(lines):
-        if line.strip().startswith("HF_TOKEN="):
-            lines[i] = f"HF_TOKEN={token}"
-            found = True
-            break
-    if not found:
-        lines.append(f"HF_TOKEN={token}")
+    # Validate token against Hugging Face API
+    try:
+        HfApi(token=token).whoami()
+    except Exception as e:
+        console.print(f"[red]✗ Token validation failed: {e}[/red]")
+        raise typer.Exit(1) from e
 
-    _ = _CONFIG_PATH.write_text("\n".join(lines) + "\n")
-    console.print(f"[green]✓ Token saved to {_CONFIG_PATH}[/green]")
+    import asyncio
+
+    async def _save():
+        from hf_sync.database import Database
+
+        db = Database(settings.db_path)
+        await db.set_config("hf_token", token)
+
+    asyncio.run(_save())
+
+    # Update current session token
+    settings.hf_token = token
+
+    console.print("[green]✓ Token validated and saved[/green]")
 
 
-# ── doctor ──────────────────────────────────────────────────────────────
+# ── config ───────────────────────────────────────────────────────────────
+
+
+@app.command()
+def config() -> None:
+    """Interactively configure settings (stored in DB)."""
+    import asyncio
+
+    from hf_sync.database import Database
+
+    db = Database(settings.db_path)
+
+    async def _interactive():
+        # Build list of (field, label, current_value, default_value)
+        fields = [
+            ("hf_repo_id", "HF_REPO_ID", settings.hf_repo_id, ""),
+            ("aria2_rpc_url", "ARIA2_RPC_URL", settings.aria2_rpc_url, "http://localhost:6800/jsonrpc"),
+            ("aria2_rpc_secret", "ARIA2_RPC_SECRET", settings.aria2_rpc_secret, ""),
+            ("rclone_remote", "RCLONE_REMOTE", settings.rclone_remote, ""),
+            ("rclone_path", "RCLONE_PATH", settings.rclone_path, ""),
+        ]
+
+        console.print("[bold]HF Sync Configuration[/bold]\n")
+        console.print("Press Enter to keep current value (shown in brackets).\n")
+
+        for field, label, current, default in fields:
+            display = current or default or "(not set)"
+            new_val = input(f"  {label} [{display}]: ").strip()
+            if new_val:
+                await db.set_config(field, new_val)
+                setattr(settings, field, new_val)
+
+        console.print()
+        console.print("[green]✓ Configuration saved to DB[/green]")
+
+    asyncio.run(_interactive())
+
+
+# ── doctor ───────────────────────────────────────────────────────────────
 
 
 @app.command()
