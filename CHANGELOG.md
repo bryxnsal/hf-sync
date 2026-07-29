@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.4.3 (2026-07-29)
+
+### Bug Fixes
+
+- **install**: Follow redirects in GitHub API request, construct URL from tag
+  ([#11](https://github.com/bryxnsal/hf-sync/pull/11),
+  [`09dd6a7`](https://github.com/bryxnsal/hf-sync/commit/09dd6a750c35ab1511f035c28a8d8687d857ab5e))
+
+
 ## v0.4.2 (2026-07-29)
 
 ### Bug Fixes
