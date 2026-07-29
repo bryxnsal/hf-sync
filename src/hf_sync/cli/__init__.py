@@ -7,6 +7,7 @@ Commands:
   hf-sync init [repo_id]     — create DB, index repo files
   hf-sync start [repo_id] [dest]  — run sync pipeline (--dry-run for pre-flight)
   hf-sync resume             — retry failed files
+  hf-sync update             — update hf-sync to latest version
   hf-sync verify             — verify downloaded files
 """
 
