@@ -4,52 +4,73 @@
 set -euo pipefail
 
 REPO="bryxnsal/hf-sync"
-BRANCH="${1:-main}"
 
 # Get current version if already installed
 CURRENT=""
 if command -v hf-sync &>/dev/null; then
-  CURRENT="$(hf-sync --version 2>/dev/null | sed 's/^hf-sync v//;s/[^0-9.]//g' || true)"
+  CURRENT="$(hf-sync --version 2>/dev/null | sed 's/^hf-sync v//;s/[^0-9.]*//g' || true)"
 fi
 
 echo "==> hf-sync installer"
 
+# Fetch latest release info
+LATEST_JSON="$(curl -sf "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null || true)"
+if [ -z "$LATEST_JSON" ]; then
+  echo "✗ Failed to fetch latest release info"
+  exit 1
+fi
+
+TAG="$(echo "$LATEST_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": "//;s/".*//')"
+VER="$(echo "$TAG" | sed 's/^v//')"
+URL="$(echo "$LATEST_JSON" | grep '"browser_download_url"' | grep '\.tar\.gz' | head -1 | sed 's/.*"browser_download_url": "//;s/".*//')"
+
+if [ -z "$TAG" ] || [ -z "$URL" ]; then
+  echo "✗ Could not determine latest release"
+  exit 1
+fi
+
 # ---- uv (recommended) ----
 if command -v uv &>/dev/null; then
-  echo "--> Installing via uv"
-  tmp="$(mktemp -d)"
-  git clone --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$tmp" 2>/dev/null || {
-    echo "✗ Failed to clone repo. Check branch name and network."
-    rm -rf "$tmp"
-    exit 1
-  }
-  NEW_VER="$(cd "$tmp" && git tag --points-at HEAD 2>/dev/null | head -1 | sed 's/^v//')"
-  [ -z "$NEW_VER" ] && NEW_VER="dev ($BRANCH)"
-
   if [ -n "$CURRENT" ]; then
-    echo "  Current: $CURRENT  →  New: $NEW_VER"
+    echo "  Current: $CURRENT  →  New: $VER"
   else
-    echo "  Version: $NEW_VER"
+    echo "  Version: $VER"
   fi
 
-  uv tool install --reinstall "$tmp" --python 3.12 2>/dev/null || uv tool install "$tmp" --python 3.12
-  rm -rf "$tmp"
-  echo "✓ hf-sync installed ($NEW_VER)"
+  echo "--> Downloading $TAG"
+  TMP_FILE="$(mktemp)"
+  curl -fsSL "$URL" -o "$TMP_FILE" || {
+    echo "✗ Failed to download release"
+    rm -f "$TMP_FILE"
+    exit 1
+  }
+
+  echo "--> Installing via uv"
+  uv tool install --reinstall "$TMP_FILE" --python 3.12 2>/dev/null || uv tool install "$TMP_FILE" --python 3.12
+  rm -f "$TMP_FILE"
+  echo "✓ hf-sync installed ($VER)"
   hf-sync doctor 2>/dev/null || echo "  Run: hf-sync doctor"
   exit 0
 fi
 
 # ---- pip3 (fallback) ----
 if command -v pip3 &>/dev/null; then
-  NEW_VER="dev ($BRANCH)"
   if [ -n "$CURRENT" ]; then
-    echo "  Current: $CURRENT  →  New: $NEW_VER"
+    echo "  Current: $CURRENT  →  New: $VER"
   else
-    echo "  Version: $NEW_VER"
+    echo "  Version: $VER"
   fi
+  echo "--> Downloading $TAG"
+  TMP_FILE="$(mktemp)"
+  curl -fsSL "$URL" -o "$TMP_FILE" || {
+    echo "✗ Failed to download release"
+    rm -f "$TMP_FILE"
+    exit 1
+  }
   echo "--> Installing via pip3"
-  pip3 install "git+https://github.com/$REPO.git@$BRANCH"
-  echo "✓ hf-sync installed ($NEW_VER)"
+  pip3 install "$TMP_FILE" 2>/dev/null || pip3 install "$TMP_FILE"
+  rm -f "$TMP_FILE"
+  echo "✓ hf-sync installed ($VER)"
   hf-sync doctor 2>/dev/null || echo "  Run: hf-sync doctor"
   exit 0
 fi
