@@ -2,10 +2,8 @@
 # pyright: reportCallInDefaultInitializer=false
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
-import tempfile
 from importlib.metadata import version as pkg_version
 
 import httpx
@@ -15,20 +13,12 @@ from packaging.version import Version
 from hf_sync.cli.app import app, console
 
 _REPO = "bryxnsal/hf-sync"
+_GIT_REPO = f"https://github.com/{_REPO}.git"
 
 
 def _parse_tag(tag: str) -> Version:
     """Parse PEP 440 version string."""
     return Version(tag.removeprefix("v"))
-
-
-def _asset_url(data: dict) -> str | None:
-    """Get .tar.gz download URL from release data."""
-    for asset in data.get("assets", []):
-        name: str = asset["name"]
-        if name.endswith(".tar.gz"):
-            return asset["browser_download_url"]
-    return None
 
 
 @app.command()
@@ -68,50 +58,29 @@ def update() -> None:
         console.print("[green]✓ Already up to date[/green]")
         return
 
-    # Get release asset URL
-    url = _asset_url(data)
-    if not url:
-        console.print("[red]✗ No .tar.gz asset found in latest release[/red]")
-        raise typer.Exit(1)
+    console.print(f"[yellow]Updating to {latest_version}...[/yellow]")
 
-    console.print("[yellow]Downloading release...[/yellow]")
+    git_url = f"{_GIT_REPO}@{latest_tag}"
 
     try:
-        resp = httpx.get(url, timeout=120)
-        resp.raise_for_status()
-    except Exception as e:
-        console.print(f"[red]✗ Failed to download release: {e}[/red]")
-        raise typer.Exit(1) from e
-
-    # Write to temp file and install
-    tmp = tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False)
-    try:
-        tmp.write(resp.content)
-        tmp.close()
-
-        console.print("[yellow]Installing...[/yellow]")
-
+        subprocess.run(
+            ["uv", "tool", "install", "--from", git_url, "hf-sync", "--upgrade"],
+            check=True,
+            capture_output=False,
+        )
+    except FileNotFoundError:
         try:
             subprocess.run(
-                ["uv", "tool", "install", "--reinstall", tmp.name],
+                [sys.executable, "-m", "pip", "install", "--upgrade", f"git+{git_url}"],
                 check=True,
                 capture_output=False,
             )
-        except FileNotFoundError:
-            try:
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--upgrade", tmp.name],
-                    check=True,
-                    capture_output=False,
-                )
-            except subprocess.CalledProcessError as e:
-                console.print(f"[red]✗ pip upgrade failed: {e}[/red]")
-                raise typer.Exit(1) from e
         except subprocess.CalledProcessError as e:
-            console.print(f"[red]✗ uv upgrade failed: {e}[/red]")
+            console.print(f"[red]✗ pip upgrade failed: {e}[/red]")
             raise typer.Exit(1) from e
-    finally:
-        os.unlink(tmp.name)
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]✗ uv upgrade failed: {e}[/red]")
+        raise typer.Exit(1) from e
 
     console.print(f"[green]✓ Updated to {latest_version}![/green]")
     console.print("  Restart hf-sync to use new version.")

@@ -957,29 +957,13 @@ class TestVerifyImpl:
 class TestUpdateCommand:
     """Update command via CliRunner."""
 
-    _ASSETS = [
-        {
-            "name": "hf_sync-0.2.0.tar.gz",
-            "browser_download_url": "https://example.com/hf_sync-0.2.0.tar.gz",
-        }
-    ]
+    _GIT_REPO = "https://github.com/bryxnsal/hf-sync.git"
 
-    def _mock_api_resp(self, tag: str, assets: list | None = None) -> MagicMock:
+    def _mock_api_resp(self, tag: str) -> MagicMock:
         resp = MagicMock()
         resp.status_code = 200
-        resp.json.return_value = {"tag_name": tag, "assets": assets or []}
+        resp.json.return_value = {"tag_name": tag, "assets": []}
         return resp
-
-    def _mock_dl_resp(self) -> MagicMock:
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.content = b"fake-tarball-content"
-        return resp
-
-    def _mock_tmpfile(self) -> MagicMock:
-        f = MagicMock()
-        f.name = "/tmp/hf-sync-test.tar.gz"
-        return f
 
     def test_update_already_up_to_date(self, cli_runner):
         from hf_sync.cli import app
@@ -1002,20 +986,14 @@ class TestUpdateCommand:
             patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
-            patch("tempfile.NamedTemporaryFile") as mock_tmp,
-            patch("hf_sync.cli.commands.update.os.unlink"),
         ):
-            mock_get.side_effect = [
-                self._mock_api_resp("v0.2.0", self._ASSETS),
-                self._mock_dl_resp(),
-            ]
-            mock_tmp.return_value = self._mock_tmpfile()
+            mock_get.return_value = self._mock_api_resp("v0.2.0")
             mock_run.return_value = MagicMock()
             result = cli_runner.invoke(app, ["update"])
         assert result.exit_code == 0
         assert "Updated to 0.2.0" in result.output
         mock_run.assert_called_once_with(
-            ["uv", "tool", "install", "--reinstall", "/tmp/hf-sync-test.tar.gz"],
+            ["uv", "tool", "install", "--from", f"{self._GIT_REPO}@v0.2.0", "hf-sync", "--upgrade"],
             check=True,
             capture_output=False,
         )
@@ -1027,16 +1005,9 @@ class TestUpdateCommand:
             patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
-            patch("tempfile.NamedTemporaryFile") as mock_tmp,
-            patch("hf_sync.cli.commands.update.os.unlink"),
             patch.object(sys, "executable", "/usr/bin/python3"),
         ):
-            mock_get.side_effect = [
-                self._mock_api_resp("v0.2.0", self._ASSETS),
-                self._mock_dl_resp(),
-            ]
-            mock_tmp.return_value = self._mock_tmpfile()
-            # uv not found → fallback to pip
+            mock_get.return_value = self._mock_api_resp("v0.2.0")
             mock_run.side_effect = [FileNotFoundError(), MagicMock()]
             result = cli_runner.invoke(app, ["update"])
         assert result.exit_code == 0
@@ -1044,7 +1015,7 @@ class TestUpdateCommand:
         assert mock_run.call_count == 2
         assert mock_run.call_args.args[0] == [
             "/usr/bin/python3", "-m", "pip", "install", "--upgrade",
-            "/tmp/hf-sync-test.tar.gz",
+            f"git+https://github.com/bryxnsal/hf-sync.git@v0.2.0",
         ]
 
     def test_update_dev_build_installs_stable(self, cli_runner):
@@ -1054,14 +1025,8 @@ class TestUpdateCommand:
             patch("hf_sync.cli.commands.update.pkg_version", return_value="0.4.1.dev1+g1a41c28d2"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
-            patch("tempfile.NamedTemporaryFile") as mock_tmp,
-            patch("hf_sync.cli.commands.update.os.unlink"),
         ):
-            mock_get.side_effect = [
-                self._mock_api_resp("v0.4.0", self._ASSETS),
-                self._mock_dl_resp(),
-            ]
-            mock_tmp.return_value = self._mock_tmpfile()
+            mock_get.return_value = self._mock_api_resp("v0.4.0")
             mock_run.return_value = MagicMock()
             result = cli_runner.invoke(app, ["update"])
         assert result.exit_code == 0
@@ -1093,35 +1058,6 @@ class TestUpdateCommand:
         assert result.exit_code == 1
         assert "Failed to check latest version" in result.output
 
-    def test_update_no_asset_found(self, cli_runner):
-        """Release has no .tar.gz asset."""
-        from hf_sync.cli import app
-
-        with (
-            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
-            patch("httpx.get") as mock_get,
-        ):
-            mock_get.return_value = self._mock_api_resp("v0.2.0", assets=[])
-            result = cli_runner.invoke(app, ["update"])
-        assert result.exit_code == 1
-        assert "No .tar.gz asset" in result.output
-
-    def test_update_download_fails(self, cli_runner):
-        from hf_sync.cli import app
-
-        with (
-            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
-            patch("httpx.get") as mock_get,
-        ):
-            api_resp = self._mock_api_resp("v0.2.0", self._ASSETS)
-            dl_resp = MagicMock()
-            dl_resp.status_code = 200
-            dl_resp.raise_for_status.side_effect = Exception("Download failed")
-            mock_get.side_effect = [api_resp, dl_resp]
-            result = cli_runner.invoke(app, ["update"])
-        assert result.exit_code == 1
-        assert "Failed to download release" in result.output
-
     def test_update_uv_install_fails(self, cli_runner):
         from hf_sync.cli import app
 
@@ -1129,14 +1065,8 @@ class TestUpdateCommand:
             patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, ["uv"])),
-            patch("tempfile.NamedTemporaryFile") as mock_tmp,
-            patch("hf_sync.cli.commands.update.os.unlink"),
         ):
-            mock_get.side_effect = [
-                self._mock_api_resp("v0.2.0", self._ASSETS),
-                self._mock_dl_resp(),
-            ]
-            mock_tmp.return_value = self._mock_tmpfile()
+            mock_get.return_value = self._mock_api_resp("v0.2.0")
             result = cli_runner.invoke(app, ["update"])
         assert result.exit_code == 1
         assert "uv upgrade failed" in result.output
@@ -1148,15 +1078,9 @@ class TestUpdateCommand:
             patch("hf_sync.cli.commands.update.pkg_version", return_value="0.1.0"),
             patch("httpx.get") as mock_get,
             patch("subprocess.run") as mock_run,
-            patch("tempfile.NamedTemporaryFile") as mock_tmp,
-            patch("hf_sync.cli.commands.update.os.unlink"),
             patch.object(sys, "executable", "/usr/bin/python3"),
         ):
-            mock_get.side_effect = [
-                self._mock_api_resp("v0.2.0", self._ASSETS),
-                self._mock_dl_resp(),
-            ]
-            mock_tmp.return_value = self._mock_tmpfile()
+            mock_get.return_value = self._mock_api_resp("v0.2.0")
             mock_run.side_effect = [
                 FileNotFoundError(),
                 subprocess.CalledProcessError(1, ["pip"]),
