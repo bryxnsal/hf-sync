@@ -2,23 +2,22 @@
 # pyright: reportCallInDefaultInitializer=false
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 from importlib.metadata import version as pkg_version
 
 import httpx
 import typer
+from packaging.version import Version
 
 from hf_sync.cli.app import app, console
 
 _REPO = "https://github.com/bryxnsal/hf-sync.git"
 
 
-def _parse_tag(tag: str) -> tuple[int, ...]:
-    """Parse 'v1.2.3' → (1,2,3) for comparison."""
-    m = re.match(r"v?(\d+(?:\.\d+)*)", tag)
-    return tuple(int(x) for x in m.group(1).split(".")) if m else (0,)
+def _parse_tag(tag: str) -> Version:
+    """Parse PEP 440 version string."""
+    return Version(tag.removeprefix("v"))
 
 
 @app.command()
@@ -43,7 +42,16 @@ def update() -> None:
 
     console.print(f"Latest version:  [bold]{latest_version}[/bold]")
 
-    if _parse_tag(latest_version) <= _parse_tag(current):
+    current_v = _parse_tag(current)
+    latest_v = _parse_tag(latest_version)
+
+    if current_v > latest_v and current_v.is_prerelease:
+        console.print(
+            f"[yellow]⚠ Dev build ({current}) — ahead of latest release ({latest_version})[/yellow]"
+        )
+        return
+
+    if current_v >= latest_v:
         console.print("[green]✓ Already up to date[/green]")
         return
 

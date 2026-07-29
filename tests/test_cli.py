@@ -1013,6 +1013,20 @@ class TestUpdateCommand:
         assert mock_run.call_args.args[0] == ["/usr/bin/python3", "-m", "pip", "install", "--upgrade",
             f"git+https://github.com/bryxnsal/hf-sync.git"]
 
+
+    def test_update_dev_build_ahead(self, cli_runner):
+        from hf_sync.cli import app
+
+        with (
+            patch("hf_sync.cli.commands.update.pkg_version", return_value="0.4.1.dev1+g1a41c28d2"),
+            patch("httpx.get") as mock_get,
+        ):
+            mock_get.return_value.status_code = 200
+            mock_get.return_value.json.return_value = {"tag_name": "v0.4.0"}
+            result = cli_runner.invoke(app, ["update"])
+        assert result.exit_code == 0
+        assert "Dev build" in result.output
+        assert "ahead of latest release" in result.output
     def test_update_api_failure(self, cli_runner):
         from hf_sync.cli import app
 
