@@ -48,6 +48,25 @@ uv tool install .
 hf-sync doctor
 ```
 
+## Desinstalación
+
+### One-liner
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bryxnsal/hf-sync/main/uninstall.sh | bash
+```
+
+Elimina el binario, limpia archivos temporales, y pregunta si deseas eliminar la base de datos local.
+
+### Manual
+
+```bash
+uv tool uninstall hf-sync
+rm -rf /tmp/hf-sync*
+# Opcional: eliminar base de datos y configuración
+rm -rf ~/.local/share/hf-sync
+```
+
 ## Uso rápido
 
 Sin configurar nada, solo necesitas el token de HF:
