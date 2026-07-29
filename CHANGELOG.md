@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.2.2 (2026-07-29)
+
+### Bug Fixes
+
+- **install**: Detect existing install, show 'updated' vs 'installed'
+  ([#4](https://github.com/bryxnsal/hf-sync/pull/4),
+  [`9c8bc79`](https://github.com/bryxnsal/hf-sync/commit/9c8bc791214bc8fdb0468a0dc18199ab681e7658))
+
+
 ## v0.2.1 (2026-07-29)
 
 ### Bug Fixes
