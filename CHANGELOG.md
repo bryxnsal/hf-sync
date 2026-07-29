@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-07-29)
+
+### Features
+
+- **install**: Show version info during install/update
+  ([#7](https://github.com/bryxnsal/hf-sync/pull/7),
+  [`d2e8c70`](https://github.com/bryxnsal/hf-sync/commit/d2e8c705cff04a4d6488d3450862bfb3dd38d6a8))
+
+install.sh now shows: Current: X.X.X → New: Y.Y.Y (when updating)
+
+Version: Y.Y.Y (fresh install)
+
+
 ## v0.2.4 (2026-07-29)
 
 ### Bug Fixes
