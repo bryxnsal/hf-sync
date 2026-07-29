@@ -30,7 +30,6 @@ if [ -z "$TAG" ]; then
 fi
 
 VER="${TAG#v}"
-URL="https://github.com/$REPO/releases/download/$TAG/hf_sync-$VER.tar.gz"
 
 # ---- uv (recommended) ----
 if command -v uv &>/dev/null; then
@@ -40,17 +39,9 @@ if command -v uv &>/dev/null; then
     echo "  Version: $VER"
   fi
 
-  echo "--> Downloading $TAG"
-  TMP_FILE="$(mktemp)"
-  curl -fsSL "$URL" -o "$TMP_FILE" || {
-    echo "✗ Failed to download release"
-    rm -f "$TMP_FILE"
-    exit 1
-  }
-
   echo "--> Installing via uv"
-  uv tool install --reinstall "$TMP_FILE" --python 3.12 2>/dev/null || uv tool install "$TMP_FILE" --python 3.12
-  rm -f "$TMP_FILE"
+  uv tool install --reinstall --from "git+https://github.com/$REPO.git@$TAG" hf-sync --python 3.12 2>/dev/null || \
+    uv tool install --from "git+https://github.com/$REPO.git@$TAG" hf-sync --python 3.12
   echo "✓ hf-sync installed ($VER)"
   hf-sync doctor 2>/dev/null || echo "  Run: hf-sync doctor"
   exit 0
@@ -63,16 +54,8 @@ if command -v pip3 &>/dev/null; then
   else
     echo "  Version: $VER"
   fi
-  echo "--> Downloading $TAG"
-  TMP_FILE="$(mktemp)"
-  curl -fsSL "$URL" -o "$TMP_FILE" || {
-    echo "✗ Failed to download release"
-    rm -f "$TMP_FILE"
-    exit 1
-  }
   echo "--> Installing via pip3"
-  pip3 install "$TMP_FILE" 2>/dev/null || pip3 install "$TMP_FILE"
-  rm -f "$TMP_FILE"
+  pip3 install "git+https://github.com/$REPO.git@$TAG" 2>/dev/null || pip3 install "git+https://github.com/$REPO.git@$TAG"
   echo "✓ hf-sync installed ($VER)"
   hf-sync doctor 2>/dev/null || echo "  Run: hf-sync doctor"
   exit 0
