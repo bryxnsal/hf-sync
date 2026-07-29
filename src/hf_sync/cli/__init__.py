@@ -9,6 +9,7 @@ Commands:
   hf-sync resume             — retry failed files
   hf-sync update             — update hf-sync to latest version
   hf-sync verify             — verify downloaded files
+  hf-sync --version, -v      — show version
 """
 
 from __future__ import annotations
